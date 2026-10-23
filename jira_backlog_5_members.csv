@@ -1,0 +1,256 @@
+Issue ID,Parent,Issue Type,Summary,Description,Priority,Story Points,Labels,Labels,Labels
+1,,Epic,E1 Project setup,Epic E1: Project setup,High,,,,
+2,,Epic,E2 API design,Epic E2: API design,High,,,,
+3,,Epic,E3 Access control (Module 1),Epic E3: Access control (Module 1),High,,,,
+4,,Epic,E4 Complaint submission (Module 2),Epic E4: Complaint submission (Module 2),High,,,,
+5,,Epic,E5 Review & categorization (Module 3),Epic E5: Review & categorization (Module 3),High,,,,
+6,,Epic,E6 Resolution & notification (Module 4),Epic E6: Resolution & notification (Module 4),High,,,,
+7,,Epic,E7 Analytics dashboard (Module 5),Epic E7: Analytics dashboard (Module 5),High,,,,
+8,,Epic,E8 Meeting scheduling (Module 6),Epic E8: Meeting scheduling (Module 6),High,,,,
+9,,Epic,E9 Deployment,Epic E9: Deployment,High,,,,
+10,,Epic,E10 Testing & release,Epic E10: Testing & release,High,,,,
+101,1,Story,US-01 Create GitHub repo with frontend and backend folders,"As the developer, I want a GitHub repository with frontend and backend folders so that all work is versioned.
+
+Acceptance criteria:
+Repo created; prototype in /frontend; empty Express app in /backend; README with run steps.
+
+Owner: Member 4
+Reviewer: Member 3",High,2,sprint-5,setup,member-4
+102,1,Story,"US-02 Set up Jira Scrum board, backlog and sprints","As the developer, I want a Jira Scrum board with the backlog and sprints so that progress is visible to my instructor.
+
+Acceptance criteria:
+Backlog imported; Sprints 5-14 created with dates; instructor can view the board.
+
+Owner: Member 1
+Reviewer: Member 2",High,1,sprint-5,setup,member-1
+103,1,Story,US-03 Express project with MySQL connection pool and .env,"As the developer, I want an Express project connected to MySQL through a connection pool so that the API can read and write data.
+
+Acceptance criteria:
+Server starts with npm start; DB settings come from .env; .env is in .gitignore.
+
+Owner: Member 3
+Reviewer: Member 2",High,3,sprint-6,setup,member-3
+104,1,Story,US-04 Health endpoint and standard JSON error handler,"As the developer, I want a health endpoint and one error handler so that every error returns the same JSON shape.
+
+Acceptance criteria:
+GET /api/v1/health returns 200; errors return {error:{code,message,fields}} with correct status codes.
+
+Owner: Member 5
+Reviewer: Member 2",High,2,sprint-6,api,member-5
+105,2,Story,US-05 Write OpenAPI 3 specification for all endpoints,"As the developer, I want an OpenAPI 3 specification of every endpoint so that the API is designed before it is coded.
+
+Acceptance criteria:
+All 17 endpoints with request/response schemas, status codes, error format and JWT security described.
+
+Owner: Member 4
+Reviewer: Member 2",High,5,sprint-6,api,member-4
+106,2,Story,US-06 Serve Swagger UI at /api/docs,"As the instructor, I want to browse the API in Swagger UI so that I can review the API design.
+
+Acceptance criteria:
+Swagger UI served at /api/docs from the OpenAPI file.
+
+Owner: Member 1
+Reviewer: Member 2",Medium,1,sprint-6,api,member-1
+107,3,Story,US-07 Admin login API with bcrypt and JWT,"As an admin, I want to log in with my email and password so that only authorised staff reach the admin area.
+
+Acceptance criteria:
+POST /auth/login checks bcrypt hash; returns JWT valid 8 hours; wrong login returns 401; last_login_at updated.
+
+Owner: Member 3
+Reviewer: Member 5",High,3,sprint-7,logic,member-3
+108,3,Story,US-08 Protect admin endpoints with JWT middleware,"As the system, I want every /admin endpoint to require a valid JWT so that student and admin areas stay separate.
+
+Acceptance criteria:
+Missing or expired token returns 401; inactive admin returns 403.
+
+Owner: Member 1
+Reviewer: Member 4",High,2,sprint-7,logic,member-1
+109,4,Story,"US-09 Lookups API: categories, options, batches, sections","As a student, I want the forms to load categories, options, batches and sections from the database so that the lists are always current.
+
+Acceptance criteria:
+GET /lookups returns active categories with options and descriptions, batches and sections.
+
+Owner: Member 4
+Reviewer: Member 1",High,2,sprint-7,api,member-4
+110,3,Story,US-10 Connect admin login page and logout to API,"As an admin, I want the login page to use the API so that the simulated login is replaced by real authentication.
+
+Acceptance criteria:
+Login page calls API, stores token, shows error on 401; Log out clears token; admin pages redirect when no token.
+
+Owner: Member 2
+Reviewer: Member 1",High,2,sprint-7,ui,member-2
+111,4,Story,US-11 Load form dropdowns from lookups API,"As a student, I want the form dropdowns filled from the API so that I choose from the department's real lists.
+
+Acceptance criteria:
+Category, option (with description), batch and section dropdowns load from /lookups.
+
+Owner: Member 1
+Reviewer: Member 5",High,1,sprint-8,ui,member-1
+112,4,Story,US-12 Submit anonymous complaint API with tracking reference,"As an anonymous student, I want to submit a complaint and get a tracking reference so that I can follow it without revealing who I am.
+
+Acceptance criteria:
+Option must belong to category; unique SVP-XXXXXX generated (retry on clash); complaint and first history row saved in one transaction; no identity stored.
+
+Owner: Member 5
+Reviewer: Member 4",High,3,sprint-7,logic,member-5
+113,4,Story,US-13 Submit identified complaint API with student details,"As an identified student, I want to submit a complaint with my details so that the department can follow up with me.
+
+Acceptance criteria:
+Reg no, batch, section, class timing and 20-1000 char description validated on the server; student created or updated; returns tracking reference.
+
+Owner: Member 2
+Reviewer: Member 5",High,3,sprint-8,logic,member-2
+114,4,Story,US-14 Connect complaint forms and success page to API,"As a student, I want the complaint forms and success page to use the API so that my complaint is really saved.
+
+Acceptance criteria:
+Both forms post to the API; server validation errors appear under the right field; success page shows returned reference.
+
+Owner: Member 3
+Reviewer: Member 4",High,2,sprint-8,ui,member-3
+115,6,Story,US-15 Track complaint by reference API,"As a student, I want to track my complaint by reference so that I can see its progress and the department's response.
+
+Acceptance criteria:
+GET /track/{ref} returns status, timeline from status_history, latest note and current meeting; unknown ref returns 404; never returns identity.
+
+Owner: Member 5
+Reviewer: Member 3",High,3,sprint-9,logic,member-5
+116,6,Story,US-16 Connect track and status pages to API,"As a student, I want the track and status pages to use the API so that I see live data.
+
+Acceptance criteria:
+Track page calls API; status page shows timeline, response and meeting from API data.
+
+Owner: Member 1
+Reviewer: Member 3",High,2,sprint-9,ui,member-1
+117,5,Story,US-17 Admin queue API with filters and pagination,"As an admin, I want a submission queue with filters so that I can find complaints quickly.
+
+Acceptance criteria:
+GET /admin/complaints filters by category, status, type, date range and reference search; 20 per page; newest first.
+
+Owner: Member 2
+Reviewer: Member 3",High,5,sprint-9,api,member-2
+118,5,Story,US-18 Connect queue page and dashboard to API,"As an admin, I want the queue and dashboard to show live data so that I work on real complaints.
+
+Acceptance criteria:
+Queue filters call the API; dashboard cards and recent list load from the API.
+
+Owner: Member 4
+Reviewer: Member 3",High,2,sprint-9,ui,member-4
+119,5,Story,US-19 Complaint details API (identity hidden if anonymous),"As an admin, I want to open a complaint's details so that I can review it.
+
+Acceptance criteria:
+GET /admin/complaints/{id} returns full details; identity fields absent for anonymous complaints.
+
+Owner: Member 3
+Reviewer: Member 1",High,2,sprint-10,api,member-3
+120,5,Story,US-20 Change status API with transition rules and history,"As an admin, I want to change a complaint's status so that the student sees progress.
+
+Acceptance criteria:
+Allowed: Received to Under Review or Rejected; Under Review to Resolved or Rejected; Resolved or Rejected back to Under Review. Other moves return 422. History row written in the same transaction.
+
+Owner: Member 1
+Reviewer: Member 5",High,3,sprint-10,logic,member-1
+121,5,Story,US-21 Assign staff API and staff list,"As an admin, I want to assign a staff member so that someone owns the complaint.
+
+Acceptance criteria:
+PATCH /staff accepts an active staff id or null (Unassigned); GET /admin/staff lists active staff.
+
+Owner: Member 2
+Reviewer: Member 1",High,2,sprint-10,api,member-2
+122,6,Story,US-22 Add resolution note API,"As an admin, I want to add a resolution note so that the student gets a response.
+
+Acceptance criteria:
+POST /notes requires 10-500 characters; saves author and time; newest note shown to student.
+
+Owner: Member 4
+Reviewer: Member 5",High,2,sprint-10,api,member-4
+123,5,Story,US-23 Connect details page actions to API,"As an admin, I want the details page actions to use the API so that my changes are saved.
+
+Acceptance criteria:
+Change status, assign staff and add note modals call the API and refresh the page; errors shown in the modal.
+
+Owner: Member 5
+Reviewer: Member 4",High,3,sprint-10,ui,member-5
+124,8,Story,US-24 Propose meeting API (identified complaints only),"As an admin, I want to propose a meeting for an identified complaint so that we can discuss it in person.
+
+Acceptance criteria:
+Rejected with 422 for anonymous complaints; date not in the past; location 3-100 chars; response starts as No Response.
+
+Owner: Member 1
+Reviewer: Member 5",High,3,sprint-11,logic,member-1
+125,8,Story,US-25 Student confirm or reschedule meeting API,"As a student, I want to confirm a meeting or ask for another time so that the meeting suits me.
+
+Acceptance criteria:
+Confirm sets Confirmed and time; request needs future date and time; confirming after a request removes the request first.
+
+Owner: Member 2
+Reviewer: Member 5",High,3,sprint-11,logic,member-2
+126,8,Story,US-26 Connect student and admin meeting pages to API,"As student and admin, I want the meeting pages to use the API so that responses are shared.
+
+Acceptance criteria:
+Student meeting page and admin meetings page with response filter load and save through the API.
+
+Owner: Member 4
+Reviewer: Member 1",High,3,sprint-11,ui,member-4
+127,7,Story,US-27 Analytics API and live dashboard,"As an admin, I want live analytics so that I can report on complaints.
+
+Acceptance criteria:
+GET /admin/analytics reads the five database views; dashboard and analytics pages show totals, status, category, monthly volume, resolution rate and class timing.
+
+Owner: Member 3
+Reviewer: Member 4",High,3,sprint-11,logic,member-3
+128,9,Story,US-28 Host MySQL database on Aiven,"As the developer, I want a hosted MySQL database so that the live site has real data.
+
+Acceptance criteria:
+Aiven free MySQL created; schema.sql and sample_data.sql run; integrity tests pass on it.
+
+Owner: Member 4
+Reviewer: Member 2",High,2,sprint-12,deploy,member-4
+129,9,Story,US-29 Deploy API and website on Render,"As the developer, I want the API and website deployed on Render so that anyone can use the portal by a link.
+
+Acceptance criteria:
+Render web service builds from GitHub on every push; Express serves the pages and the API; secrets set as environment variables.
+
+Owner: Member 3
+Reviewer: Member 2",High,3,sprint-12,deploy,member-3
+130,9,Story,"US-30 Production config: HTTPS, CORS, environment secrets","As the developer, I want production settings configured so that the live site works over HTTPS.
+
+Acceptance criteria:
+Front end calls the API by relative URL; CORS limited to the site; JWT secret and DB password only in environment variables.
+
+Owner: Member 1
+Reviewer: Member 3",High,2,sprint-12,deploy,member-1
+131,9,Story,"US-31 Security hardening: rate limit, helmet, SQL checks","As the department, I want basic security hardening so that the portal is safe to use.
+
+Acceptance criteria:
+Login rate-limited (5 tries per 15 min); helmet headers on; all SQL parameterised; no secrets in the repository.
+
+Owner: Member 5
+Reviewer: Member 1",Medium,3,sprint-12,deploy,member-5
+132,10,Story,US-32 Automated API tests with Jest and Supertest,"As the developer, I want automated API tests so that business rules stay correct when code changes.
+
+Acceptance criteria:
+Jest + Supertest tests for submission, anonymity, status transitions, meetings and login; all pass.
+
+Owner: Member 2
+Reviewer: Member 4",Medium,3,sprint-13,test,member-2
+133,10,Story,US-33 User acceptance testing on live site and bug fixes,"As the product owner, I want user acceptance testing on the live site so that the release meets the SRS.
+
+Acceptance criteria:
+Test cases for every SRS requirement run on the live URL; failures logged as bugs and fixed.
+
+Owner: Member 5
+Reviewer: Member 4",High,3,sprint-13,test,member-5
+134,10,Story,"US-34 README, final API docs and user guide","As the instructor, I want complete documentation so that the project can be run and assessed.
+
+Acceptance criteria:
+README (setup, run, deploy), final API docs, short user guide for students and admins.
+
+Owner: Member 3
+Reviewer: Member 1",High,2,sprint-13,test,member-3
+135,10,Story,US-35 Final report and presentation,"As the student, I want the final report and presentation ready so that I can submit on time.
+
+Acceptance criteria:
+Report updated with final design, test results and screenshots; demo script rehearsed on the live site.
+
+Owner: Member 1
+Reviewer: Member 3",High,3,sprint-13,test,member-1

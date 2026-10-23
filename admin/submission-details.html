@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Submission Details | Student Voice Portal</title>
+<meta name="description" content="Student Voice Portal prototype: submit complaints and track their status.">
+<link href="../assets/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+<link href="../assets/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+<link href="../css/style.css" rel="stylesheet">
+</head>
+<body data-root="../" data-nav="submissions" data-page="details" data-area="admin">
+<a class="visually-hidden-focusable position-absolute top-0 start-0 m-2 btn btn-light" style="z-index:2000" href="#main">Skip to main content</a>
+<div id="site-nav"></div>
+<main id="main" class="admin-content"><div class="container-xl">
+
+<nav aria-label="Breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="dashboard.html">Dashboard</a></li><li class="breadcrumb-item"><a href="submissions.html">Submission queue</a></li><li class="breadcrumb-item active" aria-current="page" id="dRefCrumb"></li></ol></nav>
+<div id="detailsBox">
+  <div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-4">
+    <h1 class="mb-0">Submission <span id="dRef"></span></h1>
+    <div class="d-flex flex-wrap gap-2">
+      <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#statusModal">Change status</button>
+      <button class="btn btn-quiet" data-bs-toggle="modal" data-bs-target="#staffModal">Assign staff</button>
+      <button class="btn btn-quiet" data-bs-toggle="modal" data-bs-target="#noteModal">Add resolution note</button>
+      <button class="btn btn-accent" id="openMeeting">Schedule meeting</button>
+    </div>
+  </div>
+  <p id="meetingHint" class="small text-muted text-lg-end mt-n2 mb-3 d-none">Schedule meeting is unavailable: meetings are only for identified complaints.</p>
+  <div class="row g-4">
+    <div class="col-lg-8">
+      <section class="svp-panel mb-4" aria-labelledby="dContentTitle"><div class="panel-head"><h2 id="dContentTitle">Content</h2></div><div class="svp-panel-pad" id="dContent"></div></section>
+      <section class="svp-panel mb-4" aria-labelledby="idH"><div class="panel-head"><h2 id="idH">Student information</h2></div><div class="svp-panel-pad" id="dIdentity"></div></section>
+      <section class="svp-panel mb-4" aria-labelledby="respH"><div class="panel-head"><h2 id="respH">Admin response</h2></div><div class="svp-panel-pad" id="dResponse"></div></section>
+      <section class="svp-panel" aria-labelledby="meetH"><div class="panel-head"><h2 id="meetH">Meeting information</h2></div><div class="svp-panel-pad" id="dMeeting"></div></section>
+    </div>
+    <div class="col-lg-4">
+      <section class="svp-panel" aria-labelledby="sumH">
+        <div class="panel-head"><h2 id="sumH">Summary</h2></div>
+        <dl class="detail-list svp-panel-pad mb-0">
+          <dt>Submission type</dt><dd id="dType"></dd>
+          <dt>Category</dt><dd id="dCategory"></dd>
+          <dt>Date submitted</dt><dd id="dDate"></dd>
+          <dt>Current status</dt><dd id="dStatus"></dd>
+          <dt>Assigned staff</dt><dd id="dStaff" class="mb-0"></dd>
+        </dl>
+      </section>
+      <a class="d-inline-block fw-bold mt-3" href="submissions.html">Back to queue</a>
+    </div>
+  </div>
+</div>
+
+</div></main>
+<div id="site-footer"></div>
+
+<div class="modal fade" id="statusModal" tabindex="-1" aria-labelledby="statusModalLabel" aria-hidden="true"><div class="modal-dialog modal-dialog-centered"><form class="modal-content" id="statusForm" novalidate>
+  <div class="modal-header"><h2 class="modal-title h5" id="statusModalLabel">Change status</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+  <div class="modal-body"><label for="newStatus" class="form-label">Status <span class="req" aria-hidden="true">*</span></label><select id="newStatus" class="form-select" aria-describedby="newStatus-error"></select><div class="invalid-feedback" id="newStatus-error"></div>
+    <p class="small text-muted mt-2 mb-0">The student sees the new status on their tracking page.</p></div>
+  <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Change Status</button></div>
+</form></div></div>
+
+<div class="modal fade" id="staffModal" tabindex="-1" aria-labelledby="staffModalLabel" aria-hidden="true"><div class="modal-dialog modal-dialog-centered"><form class="modal-content" id="staffForm" novalidate>
+  <div class="modal-header"><h2 class="modal-title h5" id="staffModalLabel">Assign staff</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+  <div class="modal-body"><label for="staffSelect" class="form-label">Assigned staff</label><select id="staffSelect" class="form-select"></select>
+    <p class="small text-muted mt-2 mb-0">Staff assignment is internal. Staff members do not have a login in Version 1.</p></div>
+  <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Assign Staff</button></div>
+</form></div></div>
+
+<div class="modal fade" id="noteModal" tabindex="-1" aria-labelledby="noteModalLabel" aria-hidden="true"><div class="modal-dialog modal-dialog-centered modal-lg"><form class="modal-content" id="noteForm" novalidate>
+  <div class="modal-header"><h2 class="modal-title h5" id="noteModalLabel">Resolution / response note</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+  <div class="modal-body"><label for="noteText" class="form-label">Resolution / Response Note <span class="req" aria-hidden="true">*</span></label>
+    <textarea id="noteText" class="form-control" rows="5" aria-describedby="noteText-help noteText-count noteText-error" placeholder="Explain what the department has done or will do."></textarea>
+    <div class="d-flex justify-content-between"><span id="noteText-help" class="form-text">Between 10 and 500 characters. Visible to the student.</span><span id="noteText-count" class="char-count" aria-live="polite"></span></div><div class="invalid-feedback" id="noteText-error"></div></div>
+  <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Save Response</button></div>
+</form></div></div>
+
+<div class="modal fade" id="meetingModal" tabindex="-1" aria-labelledby="meetingModalLabel" aria-hidden="true"><div class="modal-dialog modal-dialog-centered modal-lg"><form class="modal-content" id="meetingForm" novalidate>
+  <div class="modal-header"><h2 class="modal-title h5" id="meetingModalLabel">Schedule meeting</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+  <div class="modal-body">
+    <div class="row g-3">
+      <div class="col-sm-6"><label for="mtDate" class="form-label">Date <span class="req" aria-hidden="true">*</span></label><input type="date" id="mtDate" class="form-control" aria-describedby="mtDate-error"><div class="invalid-feedback" id="mtDate-error"></div></div>
+      <div class="col-sm-6"><label for="mtTime" class="form-label">Time <span class="req" aria-hidden="true">*</span></label><input type="time" id="mtTime" class="form-control" aria-describedby="mtTime-error"><div class="invalid-feedback" id="mtTime-error"></div></div>
+      <div class="col-12"><label for="mtLocation" class="form-label">Location <span class="req" aria-hidden="true">*</span></label><input type="text" id="mtLocation" class="form-control" maxlength="100" aria-describedby="mtLocation-error"><div class="invalid-feedback" id="mtLocation-error"></div></div>
+      <div class="col-12"><label for="mtMessage" class="form-label">Message / instructions <span class="text-muted fw-normal">(optional)</span></label><textarea id="mtMessage" class="form-control" rows="3" aria-describedby="mtMessage-count mtMessage-error"></textarea>
+        <div class="text-end"><span id="mtMessage-count" class="char-count" aria-live="polite"></span></div><div class="invalid-feedback" id="mtMessage-error"></div></div>
+    </div>
+    <p class="small text-muted mt-3 mb-0">Proposing a new meeting resets the student's response to “No Response”.</p>
+  </div>
+  <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Propose Meeting</button></div>
+</form></div></div>
+
+<script src="../assets/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+<script src="../js/main.js"></script>
+<script src="../js/admin.js"></script>
+</body>
+</html>

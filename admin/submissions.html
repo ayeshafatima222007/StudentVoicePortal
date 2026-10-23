@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Submission Queue | Student Voice Portal</title>
+<meta name="description" content="Student Voice Portal prototype: submit complaints and track their status.">
+<link href="../assets/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+<link href="../assets/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+<link href="../css/style.css" rel="stylesheet">
+</head>
+<body data-root="../" data-nav="submissions" data-page="submissions" data-area="admin">
+<a class="visually-hidden-focusable position-absolute top-0 start-0 m-2 btn btn-light" style="z-index:2000" href="#main">Skip to main content</a>
+<div id="site-nav"></div>
+<main id="main" class="admin-content"><div class="container-xl">
+<nav aria-label="Breadcrumb"><ol class="breadcrumb mb-2"><li class="breadcrumb-item"><a href="dashboard.html">Dashboard</a></li><li class="breadcrumb-item active" aria-current="page">Submission queue</li></ol></nav><h1 class="mb-1">Submission queue</h1><p class="page-sub mb-4">All anonymous and identified complaints, newest first.</p>
+<section class="svp-panel svp-panel-pad mb-4" aria-label="Filters">
+  <div class="row g-3 align-items-end">
+    <div class="col-6 col-md-4 col-lg-2"><label class="form-label" for="fCategory">Category</label><select id="fCategory" class="form-select"></select></div>
+    <div class="col-6 col-md-4 col-lg-2"><label class="form-label" for="fStatus">Status</label><select id="fStatus" class="form-select"></select></div>
+    <div class="col-6 col-md-4 col-lg-2"><label class="form-label" for="fType">Type</label><select id="fType" class="form-select"><option value="">All types</option><option value="Anonymous">Anonymous</option><option value="Identified">Identified</option></select></div>
+    <div class="col-6 col-md-4 col-lg-2"><label class="form-label" for="fFrom">From date</label><input type="date" id="fFrom" class="form-control"></div>
+    <div class="col-6 col-md-4 col-lg-2"><label class="form-label" for="fTo">To date</label><input type="date" id="fTo" class="form-control"></div>
+    <div class="col-6 col-md-4 col-lg-2"><button type="button" class="btn btn-quiet w-100" id="resetFilters">Clear</button></div>
+    <div class="col-12 col-md-6 col-lg-4"><label class="form-label" for="fSearch">Search reference</label><input type="search" id="fSearch" class="form-control" placeholder="e.g. 8F4K, category or staff"></div>
+  </div>
+  <p id="staffNote" class="small mt-3 mb-0 d-none">Showing open submissions without assigned staff. <strong>Clear</strong> removes this filter.</p>
+</section>
+<p class="text-muted mb-2" id="resultCount" aria-live="polite"></p>
+<section class="svp-panel">
+  <div class="table-responsive"><table class="table table-svp">
+    <caption class="visually-hidden">Submission queue</caption>
+    <thead><tr><th scope="col">Reference</th><th scope="col">Type</th><th scope="col">Category</th><th scope="col">Date</th><th scope="col">Status</th><th scope="col">Assigned staff</th><th scope="col"><span class="visually-hidden">Action</span></th></tr></thead>
+    <tbody id="queueBody"></tbody></table></div>
+</section>
+
+</div></main>
+<div id="site-footer"></div>
+
+<script src="../assets/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+<script src="../js/main.js"></script>
+<script src="../js/admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard | Student Voice Portal</title>
+<meta name="description" content="Student Voice Portal prototype: submit complaints and track their status.">
+<link href="../assets/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+<link href="../assets/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+<link href="../css/style.css" rel="stylesheet">
+</head>
+<body data-root="../" data-nav="dashboard" data-page="dashboard" data-area="admin">
+<a class="visually-hidden-focusable position-absolute top-0 start-0 m-2 btn btn-light" style="z-index:2000" href="#main">Skip to main content</a>
+<div id="site-nav"></div>
+<main id="main" class="admin-content"><div class="container-xl">
+<h1 class="mb-1">Dashboard</h1><p class="page-sub mb-4">Overview of every complaint submitted to the department.</p>
+<div class="row g-3 mb-4" id="statCards"></div>
+<div class="row g-4">
+  <div class="col-xl-8">
+    <section class="svp-panel" aria-labelledby="recentH">
+      <div class="panel-head"><h2 id="recentH">Latest submissions</h2><a class="small fw-bold" href="submissions.html">Open submission queue</a></div>
+      <div class="table-responsive"><table class="table table-svp">
+        <thead><tr><th scope="col">Reference</th><th scope="col">Type</th><th scope="col">Category</th><th scope="col">Date</th><th scope="col">Status</th><th scope="col"><span class="visually-hidden">Action</span></th></tr></thead>
+        <tbody id="recentBody"></tbody></table></div>
+    </section>
+  </div>
+  <div class="col-xl-4">
+    <div class="row g-4">
+      <div class="col-md-6 col-xl-12">
+        <section class="svp-panel" aria-labelledby="attH">
+          <div class="panel-head"><h2 id="attH">Needs attention</h2></div>
+          <div class="attention-list" id="attention"></div>
+        </section>
+      </div>
+      <div class="col-md-6 col-xl-12">
+        <section class="svp-panel" aria-labelledby="goH">
+          <div class="panel-head"><h2 id="goH">Go to</h2></div>
+          <div class="p-3 d-grid gap-2">
+            <a class="btn btn-primary" href="submissions.html">Submission queue</a>
+            <a class="btn btn-quiet" href="meetings.html">Meeting responses</a>
+            <a class="btn btn-quiet" href="analytics.html">Analytics</a>
+          </div>
+        </section>
+      </div>
+      <div class="col-12">
+        <section class="svp-panel" aria-labelledby="statsH">
+          <div class="panel-head"><h2 id="statsH">Submission statistics</h2><span class="small">Resolution rate <strong id="resolutionRate"></strong></span></div>
+          <div class="p-3" id="statusBars"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div></main>
+<div id="site-footer"></div>
+
+<script src="../assets/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+<script src="../js/main.js"></script>
+<script src="../js/admin.js"></script>
+</body>
+</html>

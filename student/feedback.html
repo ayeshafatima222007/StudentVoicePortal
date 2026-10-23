@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Feedback & Suggestions | Student Voice Portal</title>
+<meta name="description" content="Student Voice Portal prototype: submit complaints, feedback and suggestions and track their status.">
+<link href="../assets/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+<link href="../assets/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+<link href="../css/style.css" rel="stylesheet">
+</head>
+<body data-root="../" data-nav="feedback" data-page="feedback" data-area="public">
+<a class="visually-hidden-focusable position-absolute top-0 start-0 m-2 btn btn-light" href="#main">Skip to main content</a>
+<div id="site-nav"></div>
+<main id="main">
+
+<div class="container-xl">
+  <div class="page-head"><nav aria-label="Breadcrumb"><ol class="breadcrumb mb-2"><li class="breadcrumb-item"><a href="../index.html">Home</a></li><li class="breadcrumb-item active" aria-current="page">Feedback or suggestion</li></ol></nav><h1 class="mb-2">Feedback &amp; suggestions</h1><p class="page-sub mb-0">Share what is working well or an idea that would improve the department.</p></div>
+  <div class="row g-4">
+    <div class="col-lg-7">
+      <form id="feedbackForm" class="svp-panel svp-panel-pad" novalidate>
+        <div class="mb-3">
+          <label for="fbCategory" class="form-label">Category <span class="req" aria-hidden="true">*</span></label>
+          <select class="form-select" id="fbCategory" required aria-describedby="fbCategory-error"></select>
+          <div class="invalid-feedback" id="fbCategory-error"></div>
+        </div>
+        <div class="mb-2">
+          <label for="fbText" class="form-label">Your feedback or suggestion <span class="req" aria-hidden="true">*</span></label>
+          <textarea class="form-control" id="fbText" rows="6" required aria-describedby="fbText-error fbText-help fbText-count" placeholder="What would you like the department to know or improve?"></textarea>
+          <div class="invalid-feedback" id="fbText-error"></div>
+          <div class="d-flex justify-content-between gap-2"><span id="fbText-help" class="form-text">Between 20 and 1000 characters.</span><span id="fbText-count" class="char-count" aria-live="polite"></span></div>
+        </div>
+        
+<fieldset class="form-section">
+  <legend class="h5 mb-3">Your details</legend>
+  <div class="row g-3">
+    <div class="col-md-5">
+      <label for="regNo" class="form-label">Registration number <span class="req" aria-hidden="true">*</span></label>
+      <input type="text" class="form-control" id="regNo" name="regNo" placeholder="2023-CS-045" maxlength="13" autocomplete="off" required aria-describedby="regNo-help regNo-error">
+      <div class="invalid-feedback" id="regNo-error"></div>
+      <div id="regNo-help" class="form-text">Format: YYYY-DEPT-NNN</div>
+    </div>
+    <div class="col-6 col-md-4">
+      <label for="batch" class="form-label">Batch <span class="req" aria-hidden="true">*</span></label>
+      <select class="form-select" id="batch" name="batch" required aria-describedby="batch-error"></select>
+      <div class="invalid-feedback" id="batch-error"></div>
+    </div>
+    <div class="col-6 col-md-3">
+      <label for="section" class="form-label">Section <span class="req" aria-hidden="true">*</span></label>
+      <select class="form-select" id="section" name="section" required aria-describedby="section-error"></select>
+      <div class="invalid-feedback" id="section-error"></div>
+    </div>
+  </div>
+</fieldset>
+
+        <div class="d-flex flex-wrap gap-2 mt-4">
+          <button type="submit" class="btn btn-primary">Submit feedback</button>
+          <a class="btn btn-quiet" href="../index.html">Cancel</a>
+        </div>
+      </form>
+    </div>
+    <div class="col-lg-5">
+      <aside class="side-note">
+        <h2>Why details are required here</h2>
+        <p>Feedback and suggestions are written in your own words, so they are submitted with your student details. Anonymous submission is available only for complaints, using predefined options.</p>
+      </aside>
+    </div>
+  </div>
+</div>
+
+</main>
+<div id="site-footer"></div>
+<script src="../assets/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+<script src="../js/main.js"></script>
+<script src="../js/student.js"></script>
+</body>
+</html>

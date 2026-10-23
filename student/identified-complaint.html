@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Submit Identified Complaint | Student Voice Portal</title>
+<meta name="description" content="Student Voice Portal prototype: submit complaints and track their status.">
+<link href="../assets/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+<link href="../assets/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+<link href="../css/style.css" rel="stylesheet">
+</head>
+<body data-root="../" data-nav="complaint" data-page="identified" data-area="public">
+<a class="visually-hidden-focusable position-absolute top-0 start-0 m-2 btn btn-light" href="#main">Skip to main content</a>
+<div id="site-nav"></div>
+<main id="main">
+
+<div class="container-xl">
+  <div class="page-head"><nav aria-label="Breadcrumb"><ol class="breadcrumb mb-2"><li class="breadcrumb-item"><a href="../index.html">Home</a></li><li class="breadcrumb-item"><a href="complaint.html">Complaint type</a></li><li class="breadcrumb-item active" aria-current="page">Identified</li></ol></nav><h1 class="mb-2">Identified complaint</h1><p class="page-sub mb-0">Describe the issue in your own words. Your details are visible only to authorised department staff.</p></div>
+  <div class="row g-4">
+    <div class="col-lg-7">
+      <form id="identifiedForm" class="svp-panel svp-panel-pad" novalidate>
+        <div class="mb-3">
+          <label for="category" class="form-label">Complaint category <span class="req" aria-hidden="true">*</span></label>
+          <select class="form-select" id="category" required aria-describedby="category-error category-help"></select>
+          <div class="invalid-feedback" id="category-error"></div>
+          <div id="category-help" class="form-text">Not exactly a problem? Choose <strong>Other</strong> or <strong>Student Experience</strong> to share a suggestion or idea.</div>
+        </div>
+        <div class="mb-2">
+          <label for="description" class="form-label">Detailed description <span class="req" aria-hidden="true">*</span></label>
+          <textarea class="form-control" id="description" rows="6" required aria-describedby="description-error description-help description-count" placeholder="What happened, where and when, and how it affects you."></textarea>
+          <div class="invalid-feedback" id="description-error"></div>
+          <div class="d-flex justify-content-between gap-2"><span id="description-help" class="form-text">Between 20 and 1000 characters.</span><span id="description-count" class="char-count" aria-live="polite"></span></div>
+        </div>
+        
+<fieldset class="form-section">
+  <legend class="h5 mb-3">Your details</legend>
+  <div class="row g-3">
+    <div class="col-md-5">
+      <label for="regNo" class="form-label">Registration number <span class="req" aria-hidden="true">*</span></label>
+      <input type="text" class="form-control" id="regNo" name="regNo" placeholder="2023-CS-045" maxlength="13" autocomplete="off" required aria-describedby="regNo-help regNo-error">
+      <div class="invalid-feedback" id="regNo-error"></div>
+      <div id="regNo-help" class="form-text">Format: YYYY-DEPT-NNN</div>
+    </div>
+    <div class="col-6 col-md-4">
+      <label for="batch" class="form-label">Batch <span class="req" aria-hidden="true">*</span></label>
+      <select class="form-select" id="batch" name="batch" required aria-describedby="batch-error"></select>
+      <div class="invalid-feedback" id="batch-error"></div>
+    </div>
+    <div class="col-6 col-md-3">
+      <label for="section" class="form-label">Section <span class="req" aria-hidden="true">*</span></label>
+      <select class="form-select" id="section" name="section" required aria-describedby="section-error"></select>
+      <div class="invalid-feedback" id="section-error"></div>
+    </div>
+    <div class="col-12">
+      <fieldset aria-describedby="classTiming-help classTiming-error">
+        <legend class="form-label fs-6 mb-1">Class timing <span class="req" aria-hidden="true">*</span></legend>
+        <div class="d-flex flex-wrap gap-2">
+          <input type="radio" class="btn-check" name="classTiming" id="timingMorning" value="Morning" autocomplete="off">
+          <label class="btn btn-choice" for="timingMorning"><i class="bi bi-sunrise me-1" aria-hidden="true"></i>Morning</label>
+          <input type="radio" class="btn-check" name="classTiming" id="timingEvening" value="Evening" autocomplete="off">
+          <label class="btn btn-choice" for="timingEvening"><i class="bi bi-moon-stars me-1" aria-hidden="true"></i>Evening</label>
+        </div>
+        <div class="invalid-feedback" id="classTiming-error"></div>
+        <div id="classTiming-help" class="form-text">The shift your classes are held in.</div>
+      </fieldset>
+    </div>
+  </div>
+</fieldset>
+
+        <div class="d-flex flex-wrap gap-2 mt-4">
+          <button type="submit" class="btn btn-primary">Submit complaint</button>
+          <a class="btn btn-quiet" href="complaint.html">Cancel</a>
+        </div>
+      </form>
+    </div>
+    <div class="col-lg-5">
+      <aside class="side-note">
+        <h2>Why details are required here</h2>
+        <p>Identified complaints are written in your own words, so they are submitted with your student details. This lets the department follow up with you directly.</p>
+        <h2 class="mt-3">Prefer not to share your identity?</h2>
+        <p>Use an <a href="anonymous-complaint.html">anonymous complaint</a> and choose from predefined options instead.</p>
+      </aside>
+    </div>
+  </div>
+</div>
+
+</main>
+<div id="site-footer"></div>
+<script src="../assets/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+<script src="../js/main.js"></script>
+<script src="../js/student.js"></script>
+</body>
+</html>

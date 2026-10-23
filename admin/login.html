@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin Login | Student Voice Portal</title>
+<meta name="description" content="Student Voice Portal prototype: submit complaints and track their status.">
+<link href="../assets/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+<link href="../assets/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+<link href="../css/style.css" rel="stylesheet">
+</head>
+<body data-root="../" data-nav="" data-page="login" data-area="public">
+<a class="visually-hidden-focusable position-absolute top-0 start-0 m-2 btn btn-light" href="#main">Skip to main content</a>
+<div id="site-nav"></div>
+<main id="main">
+
+<div class="container-xl py-5" style="max-width:560px">
+  <h1 class="mb-2">Admin login</h1>
+  <p class="page-sub mb-4">For authorised department staff only.</p>
+  <div id="loginAlert" aria-live="polite"></div>
+  <form id="loginForm" class="svp-panel svp-panel-pad" novalidate>
+    <div class="mb-3">
+      <label for="email" class="form-label">Username / Email <span class="req" aria-hidden="true">*</span></label>
+      <input type="text" class="form-control" id="email" autocomplete="username" required aria-describedby="email-error" placeholder="admin@studentvoice.com">
+      <div class="invalid-feedback" id="email-error"></div>
+    </div>
+    <div class="mb-3">
+      <label for="password" class="form-label">Password <span class="req" aria-hidden="true">*</span></label>
+      <div class="input-group has-validation">
+        <input type="password" class="form-control" id="password" autocomplete="current-password" required aria-describedby="password-error">
+        <button class="btn btn-quiet" type="button" id="togglePw" aria-label="Show password">Show</button>
+        <div class="invalid-feedback" id="password-error"></div>
+      </div>
+    </div>
+    <div class="form-check mb-4">
+      <input class="form-check-input" type="checkbox" id="remember">
+      <label class="form-check-label" for="remember">Remember me</label>
+    </div>
+    <button type="submit" class="btn btn-primary w-100 btn-lg">Log in</button>
+  </form>
+  <div class="demo-note mt-4">
+    Demo account: <code>admin@studentvoice.com</code> / <code>Admin123</code>
+    <button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline" id="fillDemo">Fill in</button>
+    <div class="small text-muted mt-1">Login is simulated in the browser. No real authentication is performed.</div>
+  </div>
+</div>
+
+</main>
+<div id="site-footer"></div>
+<script src="../assets/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+<script src="../js/main.js"></script>
+<script src="../js/admin.js"></script>
+</body>
+</html>

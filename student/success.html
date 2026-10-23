@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Submission Successful | Student Voice Portal</title>
+<meta name="description" content="Student Voice Portal prototype: submit complaints and track their status.">
+<link href="../assets/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+<link href="../assets/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+<link href="../css/style.css" rel="stylesheet">
+</head>
+<body data-root="../" data-nav="" data-page="success" data-area="public">
+<a class="visually-hidden-focusable position-absolute top-0 start-0 m-2 btn btn-light" href="#main">Skip to main content</a>
+<div id="site-nav"></div>
+<main id="main">
+
+<div class="container-xl py-5" style="max-width:720px">
+  <div id="successBox">
+    <div class="ticket" style="max-width:none">
+      <div class="ticket-top">
+        <p class="fw-bold mb-1" style="color:var(--green)"><i class="bi bi-check-circle-fill me-1" aria-hidden="true"></i>Submission successful!</p>
+        <div class="small text-muted">Your tracking reference</div>
+        <div class="ticket-ref" id="sRef" aria-live="polite"></div>
+        <button type="button" id="copyBtn" class="btn btn-sm btn-quiet mt-1">Copy reference</button>
+      </div>
+      <div class="ticket-perf" style="--notch:var(--bg)"></div>
+      <div class="ticket-bottom">
+        <dl class="row detail-list mb-2">
+          <div class="col-sm-4"><dt>Submission type</dt><dd id="sType"></dd></div>
+          <div class="col-sm-4"><dt>Category</dt><dd id="sCategory"></dd></div>
+          <div class="col-sm-4"><dt>Submitted on</dt><dd id="sDate"></dd></div>
+        </dl>
+        <p id="sInfo" class="d-none text-muted small mt-n2 mb-3"></p>
+        <div class="demo-note mb-3">Please save this tracking reference. You will need it to check the status of your submission.</div>
+        <div class="d-flex flex-wrap gap-2">
+          <a id="trackBtn" class="btn btn-primary" href="track.html">Track submission</a>
+          <a id="anotherBtn" class="btn btn-quiet" href="complaint.html">Submit another</a>
+          <a class="btn btn-quiet" href="../index.html">Back to home</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</main>
+<div id="site-footer"></div>
+<script src="../assets/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+<script src="../js/main.js"></script>
+<script src="../js/student.js"></script>
+</body>
+</html>

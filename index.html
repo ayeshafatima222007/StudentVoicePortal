@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home | Student Voice Portal</title>
+<meta name="description" content="Student Voice Portal prototype: submit complaints and track their status.">
+<link href="assets/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+<link href="assets/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+<link href="css/style.css" rel="stylesheet">
+</head>
+<body data-root="" data-nav="home" data-page="home" data-area="public">
+<a class="visually-hidden-focusable position-absolute top-0 start-0 m-2 btn btn-light" href="#main">Skip to main content</a>
+<div id="site-nav"></div>
+<main id="main">
+
+<section class="hero">
+  <div class="container-xl">
+    <div class="row align-items-center g-4 g-lg-5">
+      <div class="col-lg-7">
+        <p class="hero-kicker mb-2">Department complaint portal</p>
+        <h1>Raise it with your department. Follow it until it's settled.</h1>
+        <p class="mb-4">Raise a concern or suggest an improvement, anonymously or with your details, and get a tracking reference you can use to check its status and read the department's response.</p>
+        <div class="d-flex flex-wrap align-items-center gap-2">
+          <a class="btn btn-primary btn-lg" href="student/complaint.html">Submit a complaint</a>
+          <a class="btn btn-quiet btn-lg" href="student/track.html">Track a submission</a>
+        </div>
+        <a class="text-link d-inline-block mt-3" href="admin/login.html">Admin login</a>
+      </div>
+      <div class="col-lg-5">
+        <div class="ticket" aria-label="Example tracking slip">
+          <div class="ticket-top">
+            <div class="small text-muted">Example tracking reference</div>
+            <div class="ticket-ref">SVP-8F4K29</div>
+            <div class="small text-muted">Identified complaint in Facilities</div>
+          </div>
+          <div class="ticket-perf"></div>
+          <div class="ticket-bottom">
+            <ol class="progress-seg compact mb-3" aria-label="Example progress">
+              <li class="done" style="--i:0"><span class="seg-track"><span class="seg-fill"></span></span><span class="seg-head"><span class="seg-dot"><i class="bi bi-check-lg" aria-hidden="true"></i></span><span class="seg-label">Received</span></span></li>
+              <li class="current" style="--i:1"><span class="seg-track"><span class="seg-fill"></span></span><span class="seg-head"><span class="seg-dot"><i class="bi bi-hourglass-split" aria-hidden="true"></i></span><span class="seg-label">Under Review</span></span></li>
+              <li class="pending" style="--i:2"><span class="seg-track"><span class="seg-fill"></span></span><span class="seg-head"><span class="seg-dot"><i class="bi bi-flag" aria-hidden="true"></i></span><span class="seg-label">Resolved or rejected</span></span></li>
+            </ol>
+            <div class="small"><strong>Meeting proposed:</strong> Tue 6 Oct 2026, 11:30 AM</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="container-xl py-5" aria-labelledby="howHeading">
+  <h2 id="howHeading" class="h3 mb-4">How it works</h2>
+  <div class="row g-4">
+    <div class="col-md-4"><div class="stat-card c-brand">
+      <h3 class="h5">1. Submit</h3><p class="mb-0 text-muted">Choose anonymous or identified, pick a category and send it. It takes about a minute.</p></div></div>
+    <div class="col-md-4"><div class="stat-card c-brand">
+      <h3 class="h5">2. Save your reference</h3><p class="mb-0 text-muted">Every submission gets a reference such as SVP-8F4K29. Copy it or write it down.</p></div></div>
+    <div class="col-md-4"><div class="stat-card c-brand">
+      <h3 class="h5">3. Track the outcome</h3><p class="mb-0 text-muted">Enter the reference to see the status and the department's response. Identified complaints may also get a meeting.</p></div></div>
+  </div>
+  <div class="row g-4 mt-1">
+    <div class="col-lg-6">
+      <div class="feature-card feature-dark h-100">
+        <span class="feature-icon" aria-hidden="true"><i class="bi bi-incognito"></i></span>
+        <h3 class="h4 mt-3">Complain without revealing who you are</h3>
+        <p>Anonymous complaints need no account. You choose a category and a predefined issue, and only your tracking reference links you to it.</p>
+        <p class="feature-sub mb-2">Never collected</p>
+        <ul class="nope-list" aria-label="Information never collected for anonymous complaints">
+          <li><i class="bi bi-x-circle" aria-hidden="true"></i>Name</li>
+          <li><i class="bi bi-x-circle" aria-hidden="true"></i>Registration no.</li>
+          <li><i class="bi bi-x-circle" aria-hidden="true"></i>Batch</li>
+          <li><i class="bi bi-x-circle" aria-hidden="true"></i>Section</li>
+          <li><i class="bi bi-x-circle" aria-hidden="true"></i>Class timing</li>
+          <li><i class="bi bi-x-circle" aria-hidden="true"></i>Account</li>
+        </ul>
+        <a class="btn btn-light mt-3" href="student/anonymous-complaint.html">Submit anonymously <i class="bi bi-arrow-right ms-1" aria-hidden="true"></i></a>
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="feature-card feature-light h-100">
+        <span class="feature-icon" aria-hidden="true"><i class="bi bi-geo-alt"></i></span>
+        <h3 class="h4 mt-3">Track your submission</h3>
+        <p class="text-muted">See where your complaint is and read the department's response.</p>
+        <ol class="flow-chips" aria-label="Status stages">
+          <li><i class="bi bi-inbox" aria-hidden="true"></i>Received</li>
+          <li><i class="bi bi-hourglass-split" aria-hidden="true"></i>Under Review</li>
+          <li><i class="bi bi-flag" aria-hidden="true"></i>Resolved or Rejected</li>
+        </ol>
+        <form class="quick-track" action="student/track.html" method="get" aria-label="Quick track">
+          <label for="quickRef" class="form-label small mb-1">Have a reference? Check it now</label>
+          <div class="input-group">
+            <input type="text" class="form-control fw-bold" id="quickRef" name="ref" placeholder="SVP-8F4K29" maxlength="10" autocomplete="off" style="letter-spacing:.05em">
+            <input type="hidden" name="go" value="1">
+            <button class="btn btn-primary" type="submit">Track</button>
+          </div>
+        </form>
+        <p class="small text-muted mt-3 mb-0"><i class="bi bi-calendar-event me-1" aria-hidden="true"></i>Identified complaints may also show a proposed meeting.</p>
+      </div>
+    </div>
+  </div>
+  <p class="small text-muted mt-4 mb-0">This portal adds a structured channel for student concerns. It does not replace the department's existing offices or the institution's complaint-handling policies.</p>
+</section>
+
+</main>
+<div id="site-footer"></div>
+<script src="assets/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

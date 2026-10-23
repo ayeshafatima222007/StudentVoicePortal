@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Analytics | Student Voice Portal</title>
+<meta name="description" content="Student Voice Portal prototype: submit complaints and track their status.">
+<link href="../assets/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+<link href="../assets/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+<link href="../css/style.css" rel="stylesheet">
+</head>
+<body data-root="../" data-nav="analytics" data-page="analytics" data-area="admin">
+<a class="visually-hidden-focusable position-absolute top-0 start-0 m-2 btn btn-light" style="z-index:2000" href="#main">Skip to main content</a>
+<div id="site-nav"></div>
+<main id="main" class="admin-content"><div class="container-xl">
+<nav aria-label="Breadcrumb"><ol class="breadcrumb mb-2"><li class="breadcrumb-item"><a href="dashboard.html">Dashboard</a></li><li class="breadcrumb-item active" aria-current="page">Analytics</li></ol></nav><h1 class="mb-1">Analytics</h1><p class="page-sub mb-4">Figures are calculated live from the prototype's sample data.</p>
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-3"><div class="stat-card"><div class="stat-value" id="aTotal"></div><div class="stat-label">Total complaints</div></div></div>
+  <div class="col-6 col-lg-3"><div class="stat-card c-muted"><div class="stat-value" id="aAnon"></div><div class="stat-label">Anonymous</div></div></div>
+  <div class="col-6 col-lg-3"><div class="stat-card c-brand"><div class="stat-value" id="aIdentified"></div><div class="stat-label">Identified</div></div></div>
+  <div class="col-6 col-lg-3"><div class="stat-card c-review"><div class="stat-value" id="aOpen"></div><div class="stat-label">Open (received or under review)</div></div></div>
+</div>
+<div class="row g-4 mb-4">
+  <div class="col-lg-8"><section class="svp-panel h-100" aria-labelledby="volH"><div class="panel-head"><h2 id="volH">Submissions per month</h2></div><div class="p-3"><div class="vol-chart" id="volChart"></div></div></section></div>
+  <div class="col-lg-4"><section class="svp-panel h-100 text-center" aria-labelledby="rateH"><div class="panel-head"><h2 id="rateH">Resolution rate</h2></div>
+    <div class="p-3"><div class="ring my-2" id="rateRing" role="img" aria-labelledby="rateValue"><div class="ring-inner"><div><strong id="rateValue"></strong><span class="small text-muted">resolved</span></div></div></div>
+    <p class="small text-muted mb-0" id="rateFormula"></p></div></section></div>
+</div>
+<div class="row g-4 mb-4">
+  <div class="col-lg-6"><section class="svp-panel h-100" aria-labelledby="saH"><div class="panel-head"><h2 id="saH">Status</h2></div><div class="p-3" id="statusBarsA"></div></section></div>
+  <div class="col-lg-6"><section class="svp-panel h-100" aria-labelledby="swH"><div class="panel-head"><h2 id="swH">Assignments by staff member</h2></div><div class="p-3" id="staffBars"></div></section></div>
+</div>
+<div class="row g-4">
+  <div class="col-lg-8"><section class="svp-panel h-100" aria-labelledby="ccH"><div class="panel-head"><h2 id="ccH">Complaints by category</h2></div><div class="table-responsive"><table class="table table-svp">
+  <thead><tr><th scope="col">Category</th><th scope="col" class="text-end">Total</th><th scope="col" class="text-end">Open</th><th scope="col" class="text-end">Resolved</th><th scope="col" class="text-end">Resolution rate</th></tr></thead>
+  <tbody id="complaintCatBody"></tbody></table></div></section></div>
+  <div class="col-lg-4"><section class="svp-panel h-100" aria-labelledby="ctH"><div class="panel-head"><h2 id="ctH">Identified complaints by class timing</h2></div><div class="p-3"><div id="timingBars"></div><p class="small text-muted mb-0 mt-2">Anonymous complaints are not counted because class timing is not collected for them.</p></div></section></div>
+</div>
+<p class="text-muted mt-3" id="closedNote"></p>
+
+</div></main>
+<div id="site-footer"></div>
+
+<script src="../assets/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+<script src="../js/main.js"></script>
+<script src="../js/admin.js"></script>
+</body>
+</html>

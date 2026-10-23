@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meetings | Student Voice Portal</title>
+<meta name="description" content="Student Voice Portal prototype: submit complaints and track their status.">
+<link href="../assets/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+<link href="../assets/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+<link href="../css/style.css" rel="stylesheet">
+</head>
+<body data-root="../" data-nav="meetings" data-page="meetings" data-area="admin">
+<a class="visually-hidden-focusable position-absolute top-0 start-0 m-2 btn btn-light" style="z-index:2000" href="#main">Skip to main content</a>
+<div id="site-nav"></div>
+<main id="main" class="admin-content"><div class="container-xl">
+<nav aria-label="Breadcrumb"><ol class="breadcrumb mb-2"><li class="breadcrumb-item"><a href="dashboard.html">Dashboard</a></li><li class="breadcrumb-item active" aria-current="page">Meeting responses</li></ol></nav><h1 class="mb-1">Meeting responses</h1><p class="page-sub mb-4">Track how students have responded to proposed meetings.</p>
+<div class="row g-3 mb-4" id="mCounts"></div>
+<div class="filter-tabs mb-3" id="respTabs" role="group" aria-label="Filter by student response"></div>
+<section class="svp-panel">
+  <div class="table-responsive"><table class="table table-svp">
+    <caption class="visually-hidden">Proposed meetings</caption>
+    <thead><tr><th scope="col">Reference</th><th scope="col">Category</th><th scope="col">Proposed</th><th scope="col">Location</th><th scope="col">Response</th><th scope="col">Student's requested time</th><th scope="col"><span class="visually-hidden">Action</span></th></tr></thead>
+    <tbody id="meetingsBody"></tbody></table></div>
+</section>
+
+</div></main>
+<div id="site-footer"></div>
+
+<script src="../assets/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+<script src="../js/main.js"></script>
+<script src="../js/admin.js"></script>
+</body>
+</html>
