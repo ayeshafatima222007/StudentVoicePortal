@@ -1,8 +1,26 @@
 -- =====================================================================
--- Student Voice Portal - sample data (fictional), matches the prototype
--- Run after schema.sql.
+-- Student Voice Portal - sample data (fictional), v2
+-- Run AFTER schema.sql. Safe to re-run: all tables are emptied first.
+-- The first 'Received' history row of every complaint is created by the
+-- trigger trg_complaint_ai, so only later status changes are inserted here.
 -- =====================================================================
 USE student_voice_portal;
+
+SET FOREIGN_KEY_CHECKS = 0;
+TRUNCATE TABLE reschedule_request;
+TRUNCATE TABLE meeting;
+TRUNCATE TABLE resolution_note;
+TRUNCATE TABLE status_history;
+TRUNCATE TABLE complaint;
+TRUNCATE TABLE student;
+TRUNCATE TABLE section;
+TRUNCATE TABLE academic_batch;
+TRUNCATE TABLE complaint_option;
+TRUNCATE TABLE complaint_category;
+TRUNCATE TABLE staff_member;
+TRUNCATE TABLE admin_user;
+SET FOREIGN_KEY_CHECKS = 1;
+
 START TRANSACTION;
 
 -- Demo admin. Password 'Admin123' stored as a bcrypt hash.
@@ -69,6 +87,7 @@ INSERT INTO student (student_id, registration_no, batch_id, section_id, class_ti
   (12, '2024-IT-088', 3, 2, 'Evening'),
   (13, '2025-SE-041', 4, 1, 'Morning');
 
+-- Inserted with their final status; the trigger writes the first 'Received' history row.
 INSERT INTO complaint (complaint_id, tracking_ref, mode, category_id, option_id, student_id, description, status, assigned_staff_id, submitted_at) VALUES
   (1, 'SVP-G6H2J8', 'Identified', 4, NULL, 13, 'Two lab sessions are scheduled back to back in buildings far apart, leaving no time to move between them.', 'Resolved', 1, '2026-07-22 10:00:00'),
   (2, 'SVP-L3K9T0', 'Identified', 7, NULL, 12, 'The department office closes before evening classes end, so evening students cannot get documents signed during exams.', 'Resolved', 2, '2026-07-30 10:01:00'),
@@ -89,49 +108,32 @@ INSERT INTO complaint (complaint_id, tracking_ref, mode, category_id, option_id,
   (17, 'SVP-4A72KD', 'Identified', 2, NULL, 2, 'Lecture slides for this course are shared only after the class, so we cannot prepare or follow along during lectures.', 'Received', NULL, '2026-09-28 10:16:00'),
   (18, 'SVP-8F4K29', 'Identified', 3, NULL, 1, 'Several chairs in Room 7 are broken and the ceiling fan makes a loud noise during lectures, making it hard to concentrate.', 'Under Review', 1, '2026-09-29 10:17:00');
 
+-- Later status changes only (the initial 'Received' rows already exist via the trigger).
 INSERT INTO status_history (complaint_id, old_status, new_status, changed_by_admin_id, changed_at) VALUES
-  (1, NULL, 'Received', NULL, '2026-07-22 10:00:00'),
   (1, 'Received', 'Under Review', 1, DATE_ADD('2026-07-22 10:00:00', INTERVAL 1 DAY)),
   (1, 'Under Review', 'Resolved', 1, DATE_ADD('2026-07-22 10:00:00', INTERVAL 2 DAY)),
-  (2, NULL, 'Received', NULL, '2026-07-30 10:01:00'),
   (2, 'Received', 'Under Review', 1, DATE_ADD('2026-07-30 10:01:00', INTERVAL 1 DAY)),
   (2, 'Under Review', 'Resolved', 1, DATE_ADD('2026-07-30 10:01:00', INTERVAL 2 DAY)),
-  (3, NULL, 'Received', NULL, '2026-08-14 10:02:00'),
   (3, 'Received', 'Under Review', 1, DATE_ADD('2026-08-14 10:02:00', INTERVAL 1 DAY)),
   (3, 'Under Review', 'Resolved', 1, DATE_ADD('2026-08-14 10:02:00', INTERVAL 2 DAY)),
-  (4, NULL, 'Received', NULL, '2026-08-20 10:03:00'),
   (4, 'Received', 'Under Review', 1, DATE_ADD('2026-08-20 10:03:00', INTERVAL 1 DAY)),
   (4, 'Under Review', 'Resolved', 1, DATE_ADD('2026-08-20 10:03:00', INTERVAL 2 DAY)),
-  (5, NULL, 'Received', NULL, '2026-08-28 10:04:00'),
   (5, 'Received', 'Under Review', 1, DATE_ADD('2026-08-28 10:04:00', INTERVAL 1 DAY)),
-  (6, NULL, 'Received', NULL, '2026-09-05 10:05:00'),
   (6, 'Received', 'Under Review', 1, DATE_ADD('2026-09-05 10:05:00', INTERVAL 1 DAY)),
   (6, 'Under Review', 'Resolved', 1, DATE_ADD('2026-09-05 10:05:00', INTERVAL 2 DAY)),
-  (7, NULL, 'Received', NULL, '2026-09-10 10:06:00'),
   (7, 'Received', 'Under Review', 1, DATE_ADD('2026-09-10 10:06:00', INTERVAL 1 DAY)),
-  (8, NULL, 'Received', NULL, '2026-09-12 10:07:00'),
   (8, 'Received', 'Under Review', 1, DATE_ADD('2026-09-12 10:07:00', INTERVAL 1 DAY)),
   (8, 'Under Review', 'Resolved', 1, DATE_ADD('2026-09-12 10:07:00', INTERVAL 2 DAY)),
-  (9, NULL, 'Received', NULL, '2026-09-15 10:08:00'),
   (9, 'Received', 'Under Review', 1, DATE_ADD('2026-09-15 10:08:00', INTERVAL 1 DAY)),
   (9, 'Under Review', 'Resolved', 1, DATE_ADD('2026-09-15 10:08:00', INTERVAL 2 DAY)),
-  (10, NULL, 'Received', NULL, '2026-09-18 10:09:00'),
-  (11, NULL, 'Received', NULL, '2026-09-20 10:10:00'),
   (11, 'Received', 'Under Review', 1, DATE_ADD('2026-09-20 10:10:00', INTERVAL 1 DAY)),
   (11, 'Under Review', 'Rejected', 1, DATE_ADD('2026-09-20 10:10:00', INTERVAL 2 DAY)),
-  (12, NULL, 'Received', NULL, '2026-09-22 10:11:00'),
   (12, 'Received', 'Under Review', 1, DATE_ADD('2026-09-22 10:11:00', INTERVAL 1 DAY)),
-  (13, NULL, 'Received', NULL, '2026-09-24 10:12:00'),
   (13, 'Received', 'Under Review', 1, DATE_ADD('2026-09-24 10:12:00', INTERVAL 1 DAY)),
   (13, 'Under Review', 'Resolved', 1, DATE_ADD('2026-09-24 10:12:00', INTERVAL 2 DAY)),
-  (14, NULL, 'Received', NULL, '2026-09-25 10:13:00'),
   (14, 'Received', 'Under Review', 1, DATE_ADD('2026-09-25 10:13:00', INTERVAL 1 DAY)),
-  (15, NULL, 'Received', NULL, '2026-09-26 10:14:00'),
-  (16, NULL, 'Received', NULL, '2026-09-27 10:15:00'),
   (16, 'Received', 'Under Review', 1, DATE_ADD('2026-09-27 10:15:00', INTERVAL 1 DAY)),
   (16, 'Under Review', 'Resolved', 1, DATE_ADD('2026-09-27 10:15:00', INTERVAL 2 DAY)),
-  (17, NULL, 'Received', NULL, '2026-09-28 10:16:00'),
-  (18, NULL, 'Received', NULL, '2026-09-29 10:17:00'),
   (18, 'Received', 'Under Review', 1, DATE_ADD('2026-09-29 10:17:00', INTERVAL 1 DAY));
 
 INSERT INTO resolution_note (complaint_id, admin_id, note_text, created_at) VALUES

@@ -1,20 +1,31 @@
 -- =====================================================================
--- Student Voice Portal - Database Schema
--- Target DBMS : MySQL 8.0.16+ or MariaDB 10.4+ (XAMPP). Tested on MySQL 8.0.46 and MariaDB.
--- Tables      : 12   Views : 5
+-- Student Voice Portal - Database Schema (v2, FastAPI-ready)
+-- Target DBMS : MySQL 8.0.16+ or MariaDB 10.4+ (XAMPP).
+-- Tables      : 12   Views : 5   Triggers : 3   Procedures : 3
 -- Rule        : records are never hard-deleted. Lookup rows and staff are
 --               retired with is_active = FALSE, so all foreign keys RESTRICT.
+--
+-- SAFE TO RE-RUN: this file no longer drops the database. Existing tables
+-- and data are kept (CREATE ... IF NOT EXISTS). Triggers, procedures and
+-- views are re-created. To wipe everything, run the line below manually:
+--   DROP DATABASE IF EXISTS student_voice_portal;
+--
+-- What the database now does by itself (no longer FastAPI's job):
+--   * tracking_ref is auto-generated (SVP-XXXXXX, unique) if not supplied
+--   * first status_history row ('Received') is written on complaint insert
+--   * every status change on complaint writes a status_history row
+--   * sp_change_status / sp_request_reschedule / sp_confirm_meeting wrap the
+--     multi-step workflows in one call
 -- =====================================================================
 
-DROP DATABASE IF EXISTS student_voice_portal;
-CREATE DATABASE student_voice_portal
+CREATE DATABASE IF NOT EXISTS student_voice_portal
   CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE student_voice_portal;
 
 -- ---------------------------------------------------------------------
 -- 1. Access control
 -- ---------------------------------------------------------------------
-CREATE TABLE admin_user (
+CREATE TABLE IF NOT EXISTS admin_user (
   admin_id        INT UNSIGNED  NOT NULL AUTO_INCREMENT,
   full_name       VARCHAR(100)  NOT NULL,
   email           VARCHAR(150)  NOT NULL,
@@ -31,7 +42,7 @@ CREATE TABLE admin_user (
 -- ---------------------------------------------------------------------
 -- 2. Reference (lookup) data
 -- ---------------------------------------------------------------------
-CREATE TABLE staff_member (
+CREATE TABLE IF NOT EXISTS staff_member (
   staff_id        INT UNSIGNED  NOT NULL AUTO_INCREMENT,
   full_name       VARCHAR(100)  NOT NULL,
   email           VARCHAR(150)  NULL,
@@ -42,7 +53,7 @@ CREATE TABLE staff_member (
   CONSTRAINT chk_staff_name        CHECK (CHAR_LENGTH(TRIM(full_name)) >= 2)
 ) ENGINE = InnoDB;
 
-CREATE TABLE complaint_category (
+CREATE TABLE IF NOT EXISTS complaint_category (
   category_id     SMALLINT UNSIGNED NOT NULL AUTO_INCREMENT,
   name            VARCHAR(50)   NOT NULL,
   display_order   SMALLINT UNSIGNED NOT NULL DEFAULT 0,
@@ -51,7 +62,7 @@ CREATE TABLE complaint_category (
   CONSTRAINT uq_complaint_category   UNIQUE (name)
 ) ENGINE = InnoDB;
 
-CREATE TABLE complaint_option (
+CREATE TABLE IF NOT EXISTS complaint_option (
   option_id       SMALLINT UNSIGNED NOT NULL AUTO_INCREMENT,
   category_id     SMALLINT UNSIGNED NOT NULL,
   label           VARCHAR(80)   NOT NULL,
@@ -65,7 +76,7 @@ CREATE TABLE complaint_option (
     REFERENCES complaint_category (category_id)
 ) ENGINE = InnoDB;
 
-CREATE TABLE academic_batch (
+CREATE TABLE IF NOT EXISTS academic_batch (
   batch_id        SMALLINT UNSIGNED NOT NULL AUTO_INCREMENT,
   batch_year      SMALLINT UNSIGNED NOT NULL,
   is_active       BOOLEAN       NOT NULL DEFAULT TRUE,
@@ -74,7 +85,7 @@ CREATE TABLE academic_batch (
   CONSTRAINT chk_batch_year     CHECK (batch_year BETWEEN 2000 AND 2100)
 ) ENGINE = InnoDB;
 
-CREATE TABLE section (
+CREATE TABLE IF NOT EXISTS section (
   section_id      SMALLINT UNSIGNED NOT NULL AUTO_INCREMENT,
   section_code    VARCHAR(5)    NOT NULL,
   is_active       BOOLEAN       NOT NULL DEFAULT TRUE,
@@ -85,7 +96,7 @@ CREATE TABLE section (
 -- ---------------------------------------------------------------------
 -- 3. Student (identified complaints only - no login, no password)
 -- ---------------------------------------------------------------------
-CREATE TABLE student (
+CREATE TABLE IF NOT EXISTS student (
   student_id      INT UNSIGNED  NOT NULL AUTO_INCREMENT,
   registration_no VARCHAR(13) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   batch_id        SMALLINT UNSIGNED NOT NULL,
@@ -104,9 +115,12 @@ CREATE TABLE student (
 -- ---------------------------------------------------------------------
 -- 4. Complaint (central table)
 -- ---------------------------------------------------------------------
-CREATE TABLE complaint (
+-- tracking_ref has the placeholder default 'SVP-000000'. The BEFORE INSERT
+-- trigger below replaces it with a unique random reference, so the
+-- application can simply omit tracking_ref when inserting.
+CREATE TABLE IF NOT EXISTS complaint (
   complaint_id      INT UNSIGNED  NOT NULL AUTO_INCREMENT,
-  tracking_ref      CHAR(10) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  tracking_ref      CHAR(10) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'SVP-000000',
   mode              VARCHAR(10)   NOT NULL,
   category_id       SMALLINT UNSIGNED NOT NULL,
   option_id         SMALLINT UNSIGNED NULL,               -- anonymous only
@@ -137,19 +151,18 @@ CREATE TABLE complaint (
   CONSTRAINT fk_complaint_student  FOREIGN KEY (student_id)
     REFERENCES student (student_id),
   CONSTRAINT fk_complaint_staff    FOREIGN KEY (assigned_staff_id)
-    REFERENCES staff_member (staff_id)
+    REFERENCES staff_member (staff_id),
+  -- Indexes for the admin queue filters (category, status, type, date range)
+  INDEX ix_complaint_status_date   (status, submitted_at),
+  INDEX ix_complaint_category_date (category_id, submitted_at),
+  INDEX ix_complaint_mode_date     (mode, submitted_at),
+  INDEX ix_complaint_submitted     (submitted_at)
 ) ENGINE = InnoDB;
-
--- Indexes for the admin queue filters (category, status, type, date range)
-CREATE INDEX ix_complaint_status_date   ON complaint (status, submitted_at);
-CREATE INDEX ix_complaint_category_date ON complaint (category_id, submitted_at);
-CREATE INDEX ix_complaint_mode_date     ON complaint (mode, submitted_at);
-CREATE INDEX ix_complaint_submitted     ON complaint (submitted_at);
 
 -- ---------------------------------------------------------------------
 -- 5. Resolution & notification history
 -- ---------------------------------------------------------------------
-CREATE TABLE resolution_note (
+CREATE TABLE IF NOT EXISTS resolution_note (
   note_id         INT UNSIGNED  NOT NULL AUTO_INCREMENT,
   complaint_id    INT UNSIGNED  NOT NULL,
   admin_id        INT UNSIGNED  NOT NULL,
@@ -158,11 +171,11 @@ CREATE TABLE resolution_note (
   CONSTRAINT pk_resolution_note   PRIMARY KEY (note_id),
   CONSTRAINT chk_note_len         CHECK (CHAR_LENGTH(TRIM(note_text)) BETWEEN 10 AND 500),
   CONSTRAINT fk_note_complaint    FOREIGN KEY (complaint_id) REFERENCES complaint (complaint_id),
-  CONSTRAINT fk_note_admin        FOREIGN KEY (admin_id)     REFERENCES admin_user (admin_id)
+  CONSTRAINT fk_note_admin        FOREIGN KEY (admin_id)     REFERENCES admin_user (admin_id),
+  INDEX ix_note_complaint (complaint_id, created_at)
 ) ENGINE = InnoDB;
-CREATE INDEX ix_note_complaint ON resolution_note (complaint_id, created_at);
 
-CREATE TABLE status_history (
+CREATE TABLE IF NOT EXISTS status_history (
   history_id          INT UNSIGNED NOT NULL AUTO_INCREMENT,
   complaint_id        INT UNSIGNED NOT NULL,
   old_status          VARCHAR(15)  NULL,                  -- NULL for the first entry (submission)
@@ -174,14 +187,14 @@ CREATE TABLE status_history (
   CONSTRAINT chk_history_new     CHECK (new_status IN ('Received', 'Under Review', 'Resolved', 'Rejected')),
   CONSTRAINT chk_history_change  CHECK (old_status IS NULL OR old_status <> new_status),
   CONSTRAINT fk_history_complaint FOREIGN KEY (complaint_id)        REFERENCES complaint (complaint_id),
-  CONSTRAINT fk_history_admin     FOREIGN KEY (changed_by_admin_id) REFERENCES admin_user (admin_id)
+  CONSTRAINT fk_history_admin     FOREIGN KEY (changed_by_admin_id) REFERENCES admin_user (admin_id),
+  INDEX ix_history_complaint (complaint_id, changed_at)
 ) ENGINE = InnoDB;
-CREATE INDEX ix_history_complaint ON status_history (complaint_id, changed_at);
 
 -- ---------------------------------------------------------------------
 -- 6. Meeting scheduling (identified complaints only)
 -- ---------------------------------------------------------------------
-CREATE TABLE meeting (
+CREATE TABLE IF NOT EXISTS meeting (
   meeting_id           INT UNSIGNED NOT NULL AUTO_INCREMENT,
   complaint_id         INT UNSIGNED NOT NULL,
   complaint_mode       VARCHAR(10)  NOT NULL DEFAULT 'Identified',
@@ -202,12 +215,12 @@ CREATE TABLE meeting (
   CONSTRAINT chk_meeting_responded   CHECK ((student_response = 'No Response') = (responded_at IS NULL)),
   CONSTRAINT fk_meeting_complaint    FOREIGN KEY (complaint_id, complaint_mode)
     REFERENCES complaint (complaint_id, mode),
-  CONSTRAINT fk_meeting_admin        FOREIGN KEY (proposed_by_admin_id) REFERENCES admin_user (admin_id)
+  CONSTRAINT fk_meeting_admin        FOREIGN KEY (proposed_by_admin_id) REFERENCES admin_user (admin_id),
+  INDEX ix_meeting_complaint (complaint_id, proposed_at),
+  INDEX ix_meeting_response  (student_response)
 ) ENGINE = InnoDB;
-CREATE INDEX ix_meeting_complaint ON meeting (complaint_id, proposed_at);
-CREATE INDEX ix_meeting_response  ON meeting (student_response);
 
-CREATE TABLE reschedule_request (
+CREATE TABLE IF NOT EXISTS reschedule_request (
   request_id       INT UNSIGNED NOT NULL AUTO_INCREMENT,
   meeting_id       INT UNSIGNED NOT NULL,
   meeting_response VARCHAR(30)  NOT NULL DEFAULT 'Requested Different Time',
@@ -224,20 +237,20 @@ CREATE TABLE reschedule_request (
 ) ENGINE = InnoDB;
 
 -- ---------------------------------------------------------------------
--- 7. Analytics views (Analytics & Reporting Dashboard)
+-- 7. Analytics views (read-only; use them for the dashboard endpoints)
 -- ---------------------------------------------------------------------
-CREATE VIEW v_status_summary AS
+CREATE OR REPLACE VIEW v_status_summary AS
 SELECT status, COUNT(*) AS total,
        ROUND(100 * COUNT(*) / (SELECT COUNT(*) FROM complaint), 1) AS percent
 FROM complaint GROUP BY status;
 
-CREATE VIEW v_resolution_rate AS
+CREATE OR REPLACE VIEW v_resolution_rate AS
 SELECT COUNT(*) AS total_complaints,
        SUM(status = 'Resolved') AS resolved,
        ROUND(100 * SUM(status = 'Resolved') / NULLIF(COUNT(*), 0), 1) AS resolution_rate_percent
 FROM complaint;
 
-CREATE VIEW v_category_summary AS
+CREATE OR REPLACE VIEW v_category_summary AS
 SELECT c.category_id, c.name AS category,
        COUNT(p.complaint_id) AS total,
        COALESCE(SUM(p.status IN ('Received', 'Under Review')), 0) AS open_count,
@@ -247,7 +260,7 @@ FROM complaint_category c
 LEFT JOIN complaint p ON p.category_id = c.category_id
 GROUP BY c.category_id, c.name;
 
-CREATE VIEW v_monthly_volume AS
+CREATE OR REPLACE VIEW v_monthly_volume AS
 SELECT DATE_FORMAT(submitted_at, '%Y-%m') AS month,
        COUNT(*) AS total,
        SUM(mode = 'Anonymous')  AS anonymous,
@@ -255,7 +268,140 @@ SELECT DATE_FORMAT(submitted_at, '%Y-%m') AS month,
 FROM complaint
 GROUP BY DATE_FORMAT(submitted_at, '%Y-%m');
 
-CREATE VIEW v_class_timing_summary AS
+CREATE OR REPLACE VIEW v_class_timing_summary AS
 SELECT s.class_timing, COUNT(*) AS identified_complaints
 FROM complaint p JOIN student s ON s.student_id = p.student_id
 GROUP BY s.class_timing;
+
+-- ---------------------------------------------------------------------
+-- 8. Triggers
+-- ---------------------------------------------------------------------
+DROP TRIGGER IF EXISTS trg_complaint_bi;
+DROP TRIGGER IF EXISTS trg_complaint_ai;
+DROP TRIGGER IF EXISTS trg_complaint_au;
+
+DELIMITER $$
+
+-- 8.1 Auto-generate a unique tracking reference (SVP- + 6 uppercase letters/digits)
+CREATE TRIGGER trg_complaint_bi BEFORE INSERT ON complaint
+FOR EACH ROW
+BEGIN
+  DECLARE v_ref   CHAR(10) CHARACTER SET ascii COLLATE ascii_bin;
+  DECLARE v_chars CHAR(36) CHARACTER SET ascii DEFAULT 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  DECLARE v_i     INT;
+
+  IF NEW.tracking_ref = 'SVP-000000' THEN
+    SET v_ref = 'SVP-000000';
+    WHILE v_ref = 'SVP-000000'
+          OR EXISTS (SELECT 1 FROM complaint WHERE tracking_ref = v_ref) DO
+      SET v_ref = 'SVP-';
+      SET v_i = 0;
+      WHILE v_i < 6 DO
+        SET v_ref = CONCAT(v_ref, SUBSTRING(v_chars, FLOOR(1 + RAND() * 36), 1));
+        SET v_i = v_i + 1;
+      END WHILE;
+    END WHILE;
+    SET NEW.tracking_ref = v_ref;
+  END IF;
+END$$
+
+-- 8.2 First history row ('Received') is written when a complaint is submitted
+CREATE TRIGGER trg_complaint_ai AFTER INSERT ON complaint
+FOR EACH ROW
+BEGIN
+  INSERT INTO status_history (complaint_id, old_status, new_status, changed_by_admin_id, changed_at)
+  VALUES (NEW.complaint_id, NULL, NEW.status, NULL, NEW.submitted_at);
+END$$
+
+-- 8.3 Every status change is recorded. The application sets
+--     SET @current_admin_id = <admin_id>;  before updating the status
+--     (sp_change_status does this for you). NULL = recorded by the system.
+CREATE TRIGGER trg_complaint_au AFTER UPDATE ON complaint
+FOR EACH ROW
+BEGIN
+  IF NEW.status <> OLD.status THEN
+    INSERT INTO status_history (complaint_id, old_status, new_status, changed_by_admin_id)
+    VALUES (NEW.complaint_id, OLD.status, NEW.status, @current_admin_id);
+  END IF;
+END$$
+
+DELIMITER ;
+
+-- ---------------------------------------------------------------------
+-- 9. Stored procedures (call them inside the application's transaction)
+-- ---------------------------------------------------------------------
+DROP PROCEDURE IF EXISTS sp_change_status;
+DROP PROCEDURE IF EXISTS sp_request_reschedule;
+DROP PROCEDURE IF EXISTS sp_confirm_meeting;
+
+DELIMITER $$
+
+-- 9.1 Change status (+ optional staff assignment and resolution note) in one call.
+--     p_staff_id NULL = keep current assignment; p_note NULL = no note.
+--     The status_history row is written by trigger trg_complaint_au.
+CREATE PROCEDURE sp_change_status(
+  IN p_complaint_id INT UNSIGNED,
+  IN p_new_status   VARCHAR(15),
+  IN p_admin_id     INT UNSIGNED,
+  IN p_staff_id     INT UNSIGNED,
+  IN p_note         VARCHAR(500))
+BEGIN
+  DECLARE v_old VARCHAR(15) DEFAULT NULL;
+
+  SELECT status INTO v_old FROM complaint WHERE complaint_id = p_complaint_id FOR UPDATE;
+  IF v_old IS NULL THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Complaint not found';
+  END IF;
+  IF v_old = p_new_status THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Status is unchanged';
+  END IF;
+
+  SET @current_admin_id = p_admin_id;
+  UPDATE complaint
+     SET status = p_new_status,
+         assigned_staff_id = COALESCE(p_staff_id, assigned_staff_id)
+   WHERE complaint_id = p_complaint_id;
+  SET @current_admin_id = NULL;
+
+  IF p_note IS NOT NULL THEN
+    INSERT INTO resolution_note (complaint_id, admin_id, note_text)
+    VALUES (p_complaint_id, p_admin_id, p_note);
+  END IF;
+END$$
+
+-- 9.2 Student asks for a different time: sets the response first, then
+--     inserts the request (the order the composite FK requires).
+CREATE PROCEDURE sp_request_reschedule(
+  IN p_meeting_id INT UNSIGNED,
+  IN p_date       DATE,
+  IN p_time       TIME,
+  IN p_message    VARCHAR(300))
+BEGIN
+  UPDATE meeting
+     SET student_response = 'Requested Different Time', responded_at = NOW()
+   WHERE meeting_id = p_meeting_id AND student_response = 'No Response';
+  IF ROW_COUNT() = 0 THEN
+    SIGNAL SQLSTATE '45000'
+      SET MESSAGE_TEXT = 'Meeting not found or already answered';
+  END IF;
+
+  INSERT INTO reschedule_request (meeting_id, preferred_date, preferred_time, message)
+  VALUES (p_meeting_id, p_date, p_time, p_message);
+END$$
+
+-- 9.3 Student confirms the meeting: removes any attached reschedule request
+--     first (a confirmed meeting cannot keep one), then confirms.
+CREATE PROCEDURE sp_confirm_meeting(IN p_meeting_id INT UNSIGNED)
+BEGIN
+  DELETE FROM reschedule_request WHERE meeting_id = p_meeting_id;
+
+  UPDATE meeting
+     SET student_response = 'Confirmed', responded_at = NOW()
+   WHERE meeting_id = p_meeting_id AND student_response <> 'Confirmed';
+  IF ROW_COUNT() = 0 THEN
+    SIGNAL SQLSTATE '45000'
+      SET MESSAGE_TEXT = 'Meeting not found or already confirmed';
+  END IF;
+END$$
+
+DELIMITER ;
