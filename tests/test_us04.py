@@ -3,7 +3,7 @@ Automated tests for US-04: health endpoint and standard JSON error handler.
 
 Run from the project root (next to main.py):
     pip install pytest
-    python -m pytest test_us04.py -v
+    python -m pytest test/test_us04.py -v
 
 No database is needed: the MySQL pool is mocked before main.py is imported.
 """
