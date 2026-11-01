@@ -7,6 +7,9 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 import mysql.connector.pooling
 
+from errors import register_error_handlers
+from health import router as health_router
+
 BASE_DIR = Path(__file__).parent
 
 # 1. .env file load karo
@@ -25,6 +28,8 @@ pool = mysql.connector.pooling.MySQLConnectionPool(
 
 app = FastAPI()
 
+register_error_handlers(app)
+app.include_router(health_router)
 
 # 3. Database test ka raasta
 @app.get("/api/db-test")
