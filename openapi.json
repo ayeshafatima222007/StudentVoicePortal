@@ -1,0 +1,3050 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Student Voice Portal API",
+    "version": "1.0.0",
+    "description": "Contract-first API specification for the Student Voice Portal.\n\nAll paths in this document are relative to `/api/v1`. FastAPI is the officially\nselected backend framework for this project.\n\n**Security model**\n- Administrators authenticate with `POST /auth/login`. The returned JWT is\n  valid for 8 hours (28,800 seconds). Every `/admin/*` operation requires that\n  JWT. Missing or expired tokens return 401; inactive administrators return 403.\n- The login endpoint is limited to 5 attempts per 15-minute window under US-31.\n  A rate-limited request returns 429.\n- Students do not have accounts. They use a tracking reference to view a\n  complaint. Meeting confirmation and rescheduling require the reference in\n  `X-Tracking-Reference`, and the server must verify that it belongs to the\n  complaint associated with the meeting.\n- Tracking and meeting-response operations must also be rate-limited before\n  public deployment. Their exact thresholds are deployment/security settings\n  and must be selected and tested by the team; 429 is part of their contract.\n- Anonymous complaints must not store student identity or free-text\n  descriptions. Student tracking responses never include student identity.\n\n**Tracking-reference security**\nThe current user-story format is `SVP-` plus six uppercase alphanumeric\ncharacters. This is approximately 31 bits of entropy and is a constrained\ncapability secret, not a password. Preserve the format for compatibility with\nUS-12, but generate it with a cryptographically secure random-number generator\n(CSPRNG), retry on uniqueness collisions, rate-limit lookup/response endpoints,\nand redact references from application and access logs. Before real public\nexposure, the project owner should consider approving a longer reference and\nupdate the database column, validation, UI, and API contract together.\n\n**Shared error contract**\nEvery API error uses `{ \"error\": { \"code\": \"...\", \"message\": \"...\",\n\"fields\": {} } }`. Validation field values may be a string or a list of\nstrings. `fields` is an empty object when an error has no field-specific\ndetails. FastAPI request/business validation failures use 422. Rate limiting\nuses 429 with a `Retry-After` response header when the retry interval is known.\n\n**Date and time conventions**\nAPI audit timestamps (`date-time`) are returned in ISO 8601 UTC form with a `Z`\nsuffix. Persist and interpret audit timestamps in UTC, including setting the\nMySQL session/application convention explicitly; MySQL `DATETIME` itself does\nnot store a timezone. Meeting and preferred times are campus-local calendar\ndates and `HH:MM` times interpreted in one explicitly configured application\ntimezone. Do not rely on the server machine's implicit timezone. A combined\nmeeting date/time must be strictly later than the current time: today is\nallowed only when the selected time has not passed. Apply this rule to both\nmeeting proposals and student reschedule requests.\n\n**Route and contract decisions**\n- US-12 and US-13 define submission behaviour but not route strings. This\n  contract uses `POST /complaints/anonymous` and `POST /complaints/identified`.\n- US-21's `PATCH /staff` wording does not identify the complaint being changed.\n  This contract uses `PATCH /admin/complaints/{complaintId}/assignment`; the body\n  accepts an active `staff_id` or `null` to unassign. `GET /admin/staff` lists\n  active staff.\n- US-22's `POST /notes` wording does not identify the parent complaint. This\n  contract uses `POST /admin/complaints/{complaintId}/notes` so the note is\n  unambiguously attached to the complaint.\n- Status and meeting-proposal actions are similarly nested under\n  `/admin/complaints/{complaintId}`. The admin meeting list is `GET /admin/meetings`.\n- Student meeting actions are separate `POST /meetings/{meetingId}/confirm`\n  and `POST /meetings/{meetingId}/reschedule` operations because they have\n  different request and state-transition behaviour. Both require the tracking\n  reference capability header, not an admin JWT.\n- The admin complaint queue's reference search is case-insensitive. Normalize\n  the supplied reference to uppercase before querying the case-sensitive\n  `ascii_bin` tracking-reference column; use parameterized SQL.\n\nThis contract contains exactly 17 operations traced to US-04, US-07, US-09,\nUS-12, US-13, US-15, US-17, US-19, US-20, US-21, US-22, US-24, US-25, US-26,\nand US-27. UI-only stories do not add API operations.\n\n**Implementation dependencies that must not be overlooked**\n- The `/health` operation is process liveness and must not depend on a live\n  database query. The FastAPI app must not fail during import because a MySQL\n  pool cannot connect; use safe/lazy initialization or otherwise allow the\n  process to start and report liveness independently.\n- Enforce the US-20 status-transition matrix in the service/database layer\n  inside the same transaction that records status history. Documentation alone\n  does not enforce the rule.\n- Ensure meeting date/time comparisons use the configured campus timezone and\n  that audit timestamps use UTC consistently.\n"
+  },
+  "servers": [
+    {
+      "url": "/api/v1",
+      "description": "API v1 base path (local FastAPI default is http://localhost:8000/api/v1)"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Health",
+      "description": "Application health."
+    },
+    {
+      "name": "Authentication",
+      "description": "Administrator authentication."
+    },
+    {
+      "name": "Lookups",
+      "description": "Active values used to populate student forms."
+    },
+    {
+      "name": "Student complaints",
+      "description": "Anonymous and identified complaint submission and tracking."
+    },
+    {
+      "name": "Admin complaints",
+      "description": "Administrator complaint queue and complaint actions."
+    },
+    {
+      "name": "Staff",
+      "description": "Active staff directory and complaint assignment."
+    },
+    {
+      "name": "Meetings",
+      "description": "Administrator meeting management and student responses."
+    },
+    {
+      "name": "Analytics",
+      "description": "Administrator reporting based on the five database views."
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "operationId": "getHealth",
+        "summary": "Check API health",
+        "description": "Returns process liveness only; this endpoint must not perform a database\nquery. Application startup must not fail solely because the database is\nunavailable (for example, do not make a required MySQL connection at module\nimport time). Database readiness is a separate concern and is not represented\nby this endpoint.",
+        "x-user-story": "US-04",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "API process is responding.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                },
+                "example": {
+                  "status": "ok"
+                }
+              }
+            }
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "default": {
+            "$ref": "#/components/responses/DefaultError"
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "operationId": "loginAdmin",
+        "summary": "Log in an administrator",
+        "description": "Verifies the administrator email and password against the stored bcrypt\npassword hash. On success, updates `last_login_at` and returns a JWT that expires\nafter 8 hours. Wrong credentials return 401. An inactive administrator is not\nallowed to access the admin area and receives 403. Under US-31, limit login to\n5 attempts per 15-minute window; requests exceeding the limit return 429.",
+        "x-user-story": "US-07",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminLoginRequest"
+              },
+              "example": {
+                "email": "admin@studentvoice.com",
+                "password": "example-password"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Administrator authenticated; JWT issued.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminLoginResponse"
+                },
+                "example": {
+                  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.example.signature",
+                  "token_type": "bearer",
+                  "expires_in": 28800
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "default": {
+            "$ref": "#/components/responses/DefaultError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/lookups": {
+      "get": {
+        "tags": [
+          "Lookups"
+        ],
+        "operationId": "getLookups",
+        "summary": "Get active form lookups",
+        "description": "Returns active complaint categories and their active options (including\nthe fixed option descriptions), active academic batches, and active\nsections. Values are sourced from the lookup tables rather than hard-coded\ninto the API. This endpoint is public because students do not log in.\n",
+        "x-user-story": "US-09",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Active lookup data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LookupsResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "default": {
+            "$ref": "#/components/responses/DefaultError"
+          }
+        }
+      }
+    },
+    "/complaints/anonymous": {
+      "post": {
+        "tags": [
+          "Student complaints"
+        ],
+        "operationId": "submitAnonymousComplaint",
+        "summary": "Submit an anonymous complaint",
+        "description": "Creates an anonymous complaint using a predefined option. The selected\noption must belong to the selected category. Do not accept a student ID,\nregistration number, batch, section, class timing, or free-text description\non this operation. The server/database generates a unique `SVP-XXXXXX`\ntracking reference and saves the initial `Received` history entry in the\nsame submission transaction.\n",
+        "x-user-story": "US-12",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnonymousComplaintRequest"
+              },
+              "example": {
+                "category_id": 3,
+                "option_id": 6
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Anonymous complaint created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComplaintSubmissionResponse"
+                },
+                "example": {
+                  "tracking_ref": "SVP-7QX3M1",
+                  "mode": "Anonymous",
+                  "status": "Received",
+                  "submitted_at": "2026-10-31T14:20:00Z"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "default": {
+            "$ref": "#/components/responses/DefaultError"
+          }
+        }
+      }
+    },
+    "/complaints/identified": {
+      "post": {
+        "tags": [
+          "Student complaints"
+        ],
+        "operationId": "submitIdentifiedComplaint",
+        "summary": "Submit an identified complaint",
+        "description": "Creates or updates the student record identified by registration number,\nthen creates an identified complaint. Registration number, batch, section,\nclass timing and a 20-1000 character description are required. Identified\nsubmissions do not use a predefined anonymous option. The server generates\nthe tracking reference and returns it to the student.\n",
+        "x-user-story": "US-13",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdentifiedComplaintRequest"
+              },
+              "example": {
+                "registration_no": "2023-CS-045",
+                "batch_id": 2,
+                "section_id": 1,
+                "class_timing": "Morning",
+                "category_id": 3,
+                "description": "The projector in Room 9 has not worked for a week and it affects lectures."
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Identified complaint created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComplaintSubmissionResponse"
+                },
+                "example": {
+                  "tracking_ref": "SVP-8F4K29",
+                  "mode": "Identified",
+                  "status": "Received",
+                  "submitted_at": "2026-10-31T14:20:00Z"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "default": {
+            "$ref": "#/components/responses/DefaultError"
+          }
+        }
+      }
+    },
+    "/track/{ref}": {
+      "get": {
+        "tags": [
+          "Student complaints"
+        ],
+        "operationId": "trackComplaint",
+        "summary": "Track a complaint by reference",
+        "description": "Returns the complaint status, status history, latest resolution note and\ncurrent/latest meeting, if any. It must never return student identity fields\n(including registration number, batch, section or class timing). For anonymous\ncomplaints, it returns the predefined option, not free text. This is a public\ncapability endpoint: rate-limit requests and redact the reference from logs.",
+        "x-user-story": "US-15",
+        "security": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TrackingReferencePath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Complaint tracking information; no student identity is included.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackingResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "default": {
+            "$ref": "#/components/responses/DefaultError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/admin/complaints": {
+      "get": {
+        "tags": [
+          "Admin complaints"
+        ],
+        "operationId": "listAdminComplaints",
+        "summary": "List complaints in the admin queue",
+        "description": "Returns 20 complaints per page, newest first. Supports category, status,\ncomplaint type, date-range and tracking-reference search filters. Every\nrequest requires an active administrator JWT.\n",
+        "x-user-story": "US-17",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "category_id",
+            "in": "query",
+            "description": "Filter by complaint category ID.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Filter by current complaint status.",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ComplaintStatus"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "description": "Filter by complaint mode.",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ComplaintMode"
+            }
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "description": "Include complaints submitted on or after this date.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "description": "Include complaints submitted on or before this date; must not be earlier than date_from.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "reference",
+            "in": "query",
+            "description": "Case-insensitive partial search. The API normalizes the supplied value to uppercase before querying the case-sensitive tracking-reference column.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 10
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "One-based page number. Page size is fixed at 20 by US-17.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated complaint queue.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComplaintQueueResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "default": {
+            "$ref": "#/components/responses/DefaultError"
+          }
+        }
+      }
+    },
+    "/admin/complaints/{complaintId}": {
+      "get": {
+        "tags": [
+          "Admin complaints"
+        ],
+        "operationId": "getAdminComplaint",
+        "summary": "Get complaint details",
+        "description": "Returns the full administrative details, including status history, notes,\nassignment and meeting information. For anonymous complaints, student\nidentity properties are omitted entirely. For identified complaints,\nthe response may include registration number, batch, section and class\ntiming. Requires an active administrator JWT.\n",
+        "x-user-story": "US-19",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ComplaintIdPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Complaint detail. The response shape depends on complaint mode.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminComplaintDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "default": {
+            "$ref": "#/components/responses/DefaultError"
+          }
+        }
+      }
+    },
+    "/admin/complaints/{complaintId}/status": {
+      "patch": {
+        "tags": [
+          "Admin complaints"
+        ],
+        "operationId": "changeComplaintStatus",
+        "summary": "Change a complaint's status",
+        "description": "Changes status and writes a status-history row in the same transaction.\nAllowed transitions are: Received -> Under Review or Rejected;\nUnder Review -> Resolved or Rejected; Resolved -> Under Review; and\nRejected -> Under Review. Unchanged or disallowed transitions return 422.\nRequires an active administrator JWT.\n",
+        "x-user-story": "US-20",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ComplaintIdPath"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeComplaintStatusRequest"
+              },
+              "example": {
+                "status": "Under Review"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Complaint status updated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComplaintStatusUpdateResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "default": {
+            "$ref": "#/components/responses/DefaultError"
+          }
+        }
+      }
+    },
+    "/admin/complaints/{complaintId}/assignment": {
+      "patch": {
+        "tags": [
+          "Staff",
+          "Admin complaints"
+        ],
+        "operationId": "assignComplaintStaff",
+        "summary": "Assign or unassign a complaint",
+        "description": "Assigns an active staff member to this complaint. Set `staff_id` to\n`null` to make the complaint Unassigned. This is the complaint-scoped route\nchosen to clarify the backlog's underspecified `PATCH /staff` requirement.\nRequires an active administrator JWT.",
+        "x-user-story": "US-21",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ComplaintIdPath"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignComplaintStaffRequest"
+              },
+              "examples": {
+                "assign": {
+                  "value": {
+                    "staff_id": 2
+                  }
+                },
+                "unassign": {
+                  "value": {
+                    "staff_id": null
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Complaint assignment updated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComplaintAssignmentResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "default": {
+            "$ref": "#/components/responses/DefaultError"
+          }
+        }
+      }
+    },
+    "/admin/staff": {
+      "get": {
+        "tags": [
+          "Staff"
+        ],
+        "operationId": "listActiveStaff",
+        "summary": "List active staff members",
+        "description": "Returns active staff members for complaint assignment. Requires an active administrator JWT.",
+        "x-user-story": "US-21",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Active staff directory.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "default": {
+            "$ref": "#/components/responses/DefaultError"
+          }
+        }
+      }
+    },
+    "/admin/complaints/{complaintId}/notes": {
+      "post": {
+        "tags": [
+          "Admin complaints"
+        ],
+        "operationId": "addResolutionNote",
+        "summary": "Add a resolution note",
+        "description": "Saves a 10-500 character resolution/response note with the authenticated\nadministrator as its author and a creation timestamp. The newest note is\nexposed on the student's tracking response. Requires an active admin JWT.\n",
+        "x-user-story": "US-22",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ComplaintIdPath"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateResolutionNoteRequest"
+              },
+              "example": {
+                "note_text": "The projector has been inspected and a replacement has been scheduled."
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Resolution note created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResolutionNoteResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "default": {
+            "$ref": "#/components/responses/DefaultError"
+          }
+        }
+      }
+    },
+    "/admin/complaints/{complaintId}/meetings": {
+      "post": {
+        "tags": [
+          "Meetings"
+        ],
+        "operationId": "proposeMeeting",
+        "summary": "Propose a meeting for an identified complaint",
+        "description": "Creates a meeting proposal for an identified complaint only. Anonymous\ncomplaints are rejected with 422. The meeting date cannot be in the past, and\nthe combined local date/time must be strictly later than the current time. A\nsame-day meeting is allowed only when its time has not passed. The location\nmust be 3-100 characters and the optional message is limited to 300 characters.\nA new proposal starts with `No Response`. Requires an active administrator JWT.",
+        "x-user-story": "US-24",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ComplaintIdPath"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProposeMeetingRequest"
+              },
+              "example": {
+                "meeting_date": "2026-11-02",
+                "meeting_time": "10:30",
+                "location": "Department Office",
+                "message": "Please bring your timetable."
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Meeting proposed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "default": {
+            "$ref": "#/components/responses/DefaultError"
+          }
+        }
+      }
+    },
+    "/meetings/{meetingId}/confirm": {
+      "post": {
+        "tags": [
+          "Meetings"
+        ],
+        "operationId": "confirmMeeting",
+        "summary": "Confirm a proposed meeting",
+        "description": "Allows the student associated with the meeting's complaint to confirm it.\nThe student has no account; the server must validate the supplied tracking\nreference against the meeting's complaint. If a reschedule request exists,\nit is removed before the meeting is marked Confirmed. Repeating confirmation\nfor an already-confirmed meeting returns 409.\n",
+        "x-user-story": "US-25",
+        "security": [
+          {
+            "trackingReference": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/MeetingIdPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Meeting confirmed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingActionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "default": {
+            "$ref": "#/components/responses/DefaultError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/meetings/{meetingId}/reschedule": {
+      "post": {
+        "tags": [
+          "Meetings"
+        ],
+        "operationId": "requestMeetingReschedule",
+        "summary": "Request a different meeting time",
+        "description": "Allows the student associated with the meeting's complaint to request a\ndifferent date and time. The tracking reference must match the complaint\nassociated with the meeting. The combined preferred local date/time must be\nstrictly later than the current time; today is allowed only when the selected\ntime has not passed. The optional message is limited to 300 characters. A\nmeeting can have at most one outstanding reschedule request. Requests after\nthe meeting has already been answered return 409.",
+        "x-user-story": "US-25",
+        "security": [
+          {
+            "trackingReference": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/MeetingIdPath"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestMeetingRescheduleRequest"
+              },
+              "example": {
+                "preferred_date": "2026-11-05",
+                "preferred_time": "12:00",
+                "message": "I have a lab session at the proposed time."
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Reschedule request created and meeting response set to Requested Different Time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RescheduleRequestResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "default": {
+            "$ref": "#/components/responses/DefaultError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/admin/meetings": {
+      "get": {
+        "tags": [
+          "Meetings"
+        ],
+        "operationId": "listAdminMeetings",
+        "summary": "List and filter meeting responses",
+        "description": "Returns meeting proposals for administrator monitoring. Supports filtering\nby student response (`No Response`, `Confirmed`, or `Requested Different Time`).\nEach item can include the student's requested alternate date/time. Requires\nan active administrator JWT.\n",
+        "x-user-story": "US-26",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "response",
+            "in": "query",
+            "required": false,
+            "description": "Filter by the student's response to the proposed meeting.",
+            "schema": {
+              "$ref": "#/components/schemas/MeetingStudentResponse"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Meeting proposals and responses.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminMeetingListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "default": {
+            "$ref": "#/components/responses/DefaultError"
+          }
+        }
+      }
+    },
+    "/admin/analytics": {
+      "get": {
+        "tags": [
+          "Analytics"
+        ],
+        "operationId": "getAdminAnalytics",
+        "summary": "Get dashboard analytics",
+        "description": "Returns overall totals and the data represented by the five SQL views:\nstatus summary, resolution rate, category summary, monthly volume and\nclass-timing summary. Staff workload is also included as a grouped count\nby assigned staff member. Requires an active administrator JWT.\n",
+        "x-user-story": "US-27",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Analytics and reporting data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "default": {
+            "$ref": "#/components/responses/DefaultError"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Administrator JWT. Issued by POST /auth/login and valid for 8 hours."
+      },
+      "trackingReference": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Tracking-Reference",
+        "description": "Student tracking reference carried in `X-Tracking-Reference` for meeting\nresponses. The server must verify that it belongs to the complaint associated\nwith the meeting. This is a capability secret: rate-limit its use and never log\nits raw value. Students do not have accounts in this project."
+      }
+    },
+    "parameters": {
+      "TrackingReferencePath": {
+        "name": "ref",
+        "in": "path",
+        "required": true,
+        "description": "Generated tracking reference; format `SVP-` followed by six uppercase letters\nor digits. Treat it as a capability secret. The format provides approximately\n31 bits of entropy, so enforce rate limiting and do not expose the reference in\napplication logs, access logs, analytics, or error messages.",
+        "schema": {
+          "type": "string",
+          "pattern": "^SVP-[A-Z0-9]{6}$",
+          "minLength": 10,
+          "maxLength": 10
+        },
+        "example": "SVP-8F4K29"
+      },
+      "ComplaintIdPath": {
+        "name": "complaintId",
+        "in": "path",
+        "required": true,
+        "description": "Numeric complaint primary key.",
+        "schema": {
+          "type": "integer",
+          "format": "int64",
+          "minimum": 1
+        },
+        "example": 18
+      },
+      "MeetingIdPath": {
+        "name": "meetingId",
+        "in": "path",
+        "required": true,
+        "description": "Numeric meeting primary key.",
+        "schema": {
+          "type": "integer",
+          "format": "int64",
+          "minimum": 1
+        },
+        "example": 3
+      }
+    },
+    "schemas": {
+      "ErrorEnvelope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "code",
+              "message",
+              "fields"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "description": "Stable application error code (for example NOT_FOUND or VALIDATION_ERROR)."
+              },
+              "message": {
+                "type": "string",
+                "description": "Human-readable summary. Must not expose stack traces or secrets."
+              },
+              "fields": {
+                "type": "object",
+                "description": "Field-level errors. Use an empty object when no field-specific\ndetails exist. A value is one message or a list of messages when\nmultiple validation rules fail for the same field.\n",
+                "additionalProperties": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  ]
+                },
+                "example": {
+                  "registration_no": [
+                    "Registration number is required.",
+                    "Registration number must match YYYY-DEPT-NNN."
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok"
+            ]
+          }
+        }
+      },
+      "AdminLoginRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "email",
+          "password"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 150
+          },
+          "password": {
+            "type": "string",
+            "minLength": 1,
+            "writeOnly": true
+          }
+        }
+      },
+      "AdminLoginResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "access_token",
+          "token_type",
+          "expires_in"
+        ],
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "description": "Signed JWT. Treat as a secret."
+          },
+          "token_type": {
+            "type": "string",
+            "enum": [
+              "bearer"
+            ]
+          },
+          "expires_in": {
+            "type": "integer",
+            "enum": [
+              28800
+            ],
+            "description": "Token lifetime in seconds (8 hours)."
+          }
+        }
+      },
+      "AdminSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "admin_id",
+          "full_name",
+          "email"
+        ],
+        "properties": {
+          "admin_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "full_name": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 150
+          }
+        }
+      },
+      "ComplaintMode": {
+        "type": "string",
+        "enum": [
+          "Anonymous",
+          "Identified"
+        ]
+      },
+      "ComplaintStatus": {
+        "type": "string",
+        "enum": [
+          "Received",
+          "Under Review",
+          "Resolved",
+          "Rejected"
+        ]
+      },
+      "ClassTiming": {
+        "type": "string",
+        "enum": [
+          "Morning",
+          "Evening"
+        ]
+      },
+      "MeetingStudentResponse": {
+        "type": "string",
+        "enum": [
+          "No Response",
+          "Confirmed",
+          "Requested Different Time"
+        ]
+      },
+      "LookupOption": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "option_id",
+          "label",
+          "description"
+        ],
+        "properties": {
+          "option_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 200
+          }
+        }
+      },
+      "LookupCategory": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "category_id",
+          "name",
+          "options"
+        ],
+        "properties": {
+          "category_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 50
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LookupOption"
+            }
+          }
+        }
+      },
+      "LookupBatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "batch_id",
+          "batch_year"
+        ],
+        "properties": {
+          "batch_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "batch_year": {
+            "type": "integer",
+            "minimum": 2000,
+            "maximum": 2100
+          }
+        }
+      },
+      "LookupSection": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "section_id",
+          "section_code"
+        ],
+        "properties": {
+          "section_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "section_code": {
+            "type": "string",
+            "maxLength": 5
+          }
+        }
+      },
+      "LookupsResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "categories",
+          "batches",
+          "sections"
+        ],
+        "properties": {
+          "categories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LookupCategory"
+            }
+          },
+          "batches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LookupBatch"
+            }
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LookupSection"
+            }
+          }
+        }
+      },
+      "AnonymousComplaintRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "category_id",
+          "option_id"
+        ],
+        "description": "No identity fields or free-text description are accepted for anonymous submissions.",
+        "properties": {
+          "category_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "option_id": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "IdentifiedComplaintRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "registration_no",
+          "batch_id",
+          "section_id",
+          "class_timing",
+          "category_id",
+          "description"
+        ],
+        "properties": {
+          "registration_no": {
+            "type": "string",
+            "minLength": 11,
+            "maxLength": 13,
+            "pattern": "^[0-9]{4}-[A-Z]{2,4}-[0-9]{3}$",
+            "example": "2023-CS-045"
+          },
+          "batch_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Must identify an active academic batch returned by GET /lookups."
+          },
+          "section_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Must identify an active section returned by GET /lookups."
+          },
+          "class_timing": {
+            "$ref": "#/components/schemas/ClassTiming"
+          },
+          "category_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "description": {
+            "type": "string",
+            "minLength": 20,
+            "maxLength": 1000,
+            "description": "Trimmed free-text complaint description; whitespace-only values are invalid."
+          }
+        }
+      },
+      "ComplaintSubmissionResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "tracking_ref",
+          "mode",
+          "status",
+          "submitted_at"
+        ],
+        "properties": {
+          "tracking_ref": {
+            "type": "string",
+            "pattern": "^SVP-[A-Z0-9]{6}$"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/ComplaintMode"
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ComplaintStatus"
+              }
+            ],
+            "description": "Initial status is Received."
+          },
+          "submitted_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ComplaintCategorySummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "category_id",
+          "name"
+        ],
+        "properties": {
+          "category_id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "StatusHistoryItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "old_status",
+          "new_status",
+          "changed_at"
+        ],
+        "properties": {
+          "old_status": {
+            "type": "string",
+            "enum": [
+              "Received",
+              "Under Review",
+              "Resolved",
+              "Rejected"
+            ],
+            "nullable": true,
+            "description": "Null for the initial Received history row."
+          },
+          "new_status": {
+            "$ref": "#/components/schemas/ComplaintStatus"
+          },
+          "changed_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PublicResolutionNote": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "note_text",
+          "created_at"
+        ],
+        "properties": {
+          "note_text": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 500
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "TrackingResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "tracking_ref",
+          "mode",
+          "category",
+          "option",
+          "description",
+          "status",
+          "submitted_at",
+          "timeline",
+          "latest_note",
+          "meeting"
+        ],
+        "description": "Deliberately excludes all student identity fields for both complaint modes.",
+        "properties": {
+          "tracking_ref": {
+            "type": "string",
+            "pattern": "^SVP-[A-Z0-9]{6}$"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/ComplaintMode"
+          },
+          "category": {
+            "$ref": "#/components/schemas/ComplaintCategorySummary"
+          },
+          "option": {
+            "type": "object",
+            "nullable": true,
+            "description": "Present for anonymous complaints; null for identified complaints.",
+            "additionalProperties": false,
+            "required": [
+              "option_id",
+              "label",
+              "description"
+            ],
+            "properties": {
+              "option_id": {
+                "type": "integer"
+              },
+              "label": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              }
+            }
+          },
+          "description": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 20,
+            "maxLength": 1000,
+            "description": "Present for identified complaints; null for anonymous complaints."
+          },
+          "status": {
+            "$ref": "#/components/schemas/ComplaintStatus"
+          },
+          "submitted_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "timeline": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StatusHistoryItem"
+            }
+          },
+          "latest_note": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": false,
+            "required": [
+              "note_text",
+              "created_at"
+            ],
+            "properties": {
+              "note_text": {
+                "type": "string"
+              },
+              "created_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "meeting": {
+            "type": "object",
+            "nullable": true,
+            "description": "Current/latest meeting for an identified complaint, or null if none exists.",
+            "additionalProperties": false,
+            "required": [
+              "meeting_id",
+              "meeting_date",
+              "meeting_time",
+              "location",
+              "message",
+              "student_response",
+              "proposed_at",
+              "responded_at",
+              "reschedule_request"
+            ],
+            "properties": {
+              "meeting_id": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "meeting_date": {
+                "type": "string",
+                "format": "date"
+              },
+              "meeting_time": {
+                "type": "string",
+                "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+                "description": "Local time in HH:MM format."
+              },
+              "location": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 100
+              },
+              "message": {
+                "type": "string",
+                "nullable": true,
+                "maxLength": 300
+              },
+              "student_response": {
+                "$ref": "#/components/schemas/MeetingStudentResponse"
+              },
+              "proposed_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "responded_at": {
+                "type": "string",
+                "format": "date-time",
+                "nullable": true
+              },
+              "reschedule_request": {
+                "type": "object",
+                "nullable": true,
+                "additionalProperties": false,
+                "required": [
+                  "preferred_date",
+                  "preferred_time",
+                  "message",
+                  "requested_at"
+                ],
+                "properties": {
+                  "preferred_date": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "preferred_time": {
+                    "type": "string",
+                    "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+                  },
+                  "message": {
+                    "type": "string",
+                    "nullable": true,
+                    "maxLength": 300
+                  },
+                  "requested_at": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "Pagination": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "page",
+          "page_size",
+          "total_items",
+          "total_pages"
+        ],
+        "properties": {
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "page_size": {
+            "type": "integer",
+            "enum": [
+              20
+            ]
+          },
+          "total_items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "total_pages": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "StaffSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "staff_id",
+          "full_name"
+        ],
+        "properties": {
+          "staff_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "full_name": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "nullable": true
+          }
+        }
+      },
+      "ComplaintQueueItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "complaint_id",
+          "tracking_ref",
+          "mode",
+          "category",
+          "submitted_at",
+          "status",
+          "assigned_staff"
+        ],
+        "properties": {
+          "complaint_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "tracking_ref": {
+            "type": "string",
+            "pattern": "^SVP-[A-Z0-9]{6}$"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/ComplaintMode"
+          },
+          "category": {
+            "$ref": "#/components/schemas/ComplaintCategorySummary"
+          },
+          "submitted_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ComplaintStatus"
+          },
+          "assigned_staff": {
+            "$ref": "#/components/schemas/NullableStaffSummary"
+          }
+        }
+      },
+      "ComplaintQueueResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "pagination"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ComplaintQueueItem"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        }
+      },
+      "StudentIdentity": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "registration_no",
+          "batch",
+          "section",
+          "class_timing"
+        ],
+        "properties": {
+          "registration_no": {
+            "type": "string",
+            "minLength": 11,
+            "maxLength": 13,
+            "pattern": "^[0-9]{4}-[A-Z]{2,4}-[0-9]{3}$"
+          },
+          "batch": {
+            "$ref": "#/components/schemas/LookupBatch"
+          },
+          "section": {
+            "$ref": "#/components/schemas/LookupSection"
+          },
+          "class_timing": {
+            "$ref": "#/components/schemas/ClassTiming"
+          }
+        }
+      },
+      "AdminResolutionNote": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "note_id",
+          "note_text",
+          "created_at",
+          "author"
+        ],
+        "properties": {
+          "note_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "note_text": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 500
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "author": {
+            "$ref": "#/components/schemas/AdminSummary"
+          }
+        }
+      },
+      "AdminStatusHistoryItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "history_id",
+          "old_status",
+          "new_status",
+          "changed_at",
+          "changed_by"
+        ],
+        "properties": {
+          "history_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "old_status": {
+            "type": "string",
+            "enum": [
+              "Received",
+              "Under Review",
+              "Resolved",
+              "Rejected"
+            ],
+            "nullable": true,
+            "description": "Null for the initial Received history row."
+          },
+          "new_status": {
+            "$ref": "#/components/schemas/ComplaintStatus"
+          },
+          "changed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "changed_by": {
+            "$ref": "#/components/schemas/NullableAdminSummary"
+          }
+        }
+      },
+      "NullableStaffSummary": {
+        "type": "object",
+        "nullable": true,
+        "additionalProperties": false,
+        "required": [
+          "staff_id",
+          "full_name"
+        ],
+        "properties": {
+          "staff_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "full_name": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "nullable": true
+          }
+        }
+      },
+      "NullableAdminSummary": {
+        "type": "object",
+        "nullable": true,
+        "additionalProperties": false,
+        "required": [
+          "admin_id",
+          "full_name",
+          "email"
+        ],
+        "properties": {
+          "admin_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "full_name": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 150
+          }
+        }
+      },
+      "NullableAdminComplaintMeeting": {
+        "type": "object",
+        "nullable": true,
+        "additionalProperties": false,
+        "required": [
+          "meeting_id",
+          "meeting_date",
+          "meeting_time",
+          "location",
+          "message",
+          "student_response",
+          "proposed_at",
+          "responded_at",
+          "reschedule_request"
+        ],
+        "properties": {
+          "meeting_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "meeting_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "meeting_time": {
+            "type": "string",
+            "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+          },
+          "location": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 100
+          },
+          "message": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 300
+          },
+          "student_response": {
+            "$ref": "#/components/schemas/MeetingStudentResponse"
+          },
+          "proposed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "responded_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "reschedule_request": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": false,
+            "required": [
+              "preferred_date",
+              "preferred_time",
+              "message",
+              "requested_at"
+            ],
+            "properties": {
+              "preferred_date": {
+                "type": "string",
+                "format": "date"
+              },
+              "preferred_time": {
+                "type": "string",
+                "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+              },
+              "message": {
+                "type": "string",
+                "nullable": true,
+                "maxLength": 300
+              },
+              "requested_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "AdminAnonymousComplaintDetail": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "complaint_id",
+          "tracking_ref",
+          "mode",
+          "category",
+          "option",
+          "status",
+          "submitted_at",
+          "updated_at",
+          "assigned_staff",
+          "notes",
+          "status_history",
+          "meeting"
+        ],
+        "description": "Anonymous response intentionally excludes description and all student identity properties.",
+        "properties": {
+          "complaint_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "tracking_ref": {
+            "type": "string",
+            "pattern": "^SVP-[A-Z0-9]{6}$"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "Anonymous"
+            ]
+          },
+          "category": {
+            "$ref": "#/components/schemas/ComplaintCategorySummary"
+          },
+          "option": {
+            "$ref": "#/components/schemas/LookupOption"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ComplaintStatus"
+          },
+          "submitted_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "assigned_staff": {
+            "$ref": "#/components/schemas/NullableStaffSummary"
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminResolutionNote"
+            }
+          },
+          "status_history": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminStatusHistoryItem"
+            }
+          },
+          "meeting": {
+            "$ref": "#/components/schemas/NullableAdminComplaintMeeting"
+          }
+        }
+      },
+      "AdminIdentifiedComplaintDetail": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "complaint_id",
+          "tracking_ref",
+          "mode",
+          "category",
+          "description",
+          "student_identity",
+          "status",
+          "submitted_at",
+          "updated_at",
+          "assigned_staff",
+          "notes",
+          "status_history",
+          "meeting"
+        ],
+        "properties": {
+          "complaint_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "tracking_ref": {
+            "type": "string",
+            "pattern": "^SVP-[A-Z0-9]{6}$"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "Identified"
+            ]
+          },
+          "category": {
+            "$ref": "#/components/schemas/ComplaintCategorySummary"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 20,
+            "maxLength": 1000
+          },
+          "student_identity": {
+            "$ref": "#/components/schemas/StudentIdentity"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ComplaintStatus"
+          },
+          "submitted_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "assigned_staff": {
+            "$ref": "#/components/schemas/NullableStaffSummary"
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminResolutionNote"
+            }
+          },
+          "status_history": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminStatusHistoryItem"
+            }
+          },
+          "meeting": {
+            "$ref": "#/components/schemas/NullableAdminComplaintMeeting"
+          }
+        }
+      },
+      "AdminComplaintDetail": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/AdminAnonymousComplaintDetail"
+          },
+          {
+            "$ref": "#/components/schemas/AdminIdentifiedComplaintDetail"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "mode",
+          "mapping": {
+            "Anonymous": "#/components/schemas/AdminAnonymousComplaintDetail",
+            "Identified": "#/components/schemas/AdminIdentifiedComplaintDetail"
+          }
+        }
+      },
+      "ChangeComplaintStatusRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/ComplaintStatus"
+          }
+        }
+      },
+      "ComplaintStatusUpdateResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "complaint_id",
+          "tracking_ref",
+          "status",
+          "updated_at"
+        ],
+        "properties": {
+          "complaint_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "tracking_ref": {
+            "type": "string",
+            "pattern": "^SVP-[A-Z0-9]{6}$"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ComplaintStatus"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AssignComplaintStaffRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "staff_id"
+        ],
+        "properties": {
+          "staff_id": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1,
+            "nullable": true,
+            "description": "Active staff ID, or null to unassign the complaint."
+          }
+        }
+      },
+      "ComplaintAssignmentResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "complaint_id",
+          "assigned_staff"
+        ],
+        "properties": {
+          "complaint_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "assigned_staff": {
+            "$ref": "#/components/schemas/NullableStaffSummary"
+          }
+        }
+      },
+      "StaffListResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StaffSummary"
+            }
+          }
+        }
+      },
+      "CreateResolutionNoteRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "note_text"
+        ],
+        "properties": {
+          "note_text": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 500,
+            "description": "Trimmed note text; whitespace-only values are invalid."
+          }
+        }
+      },
+      "ResolutionNoteResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "note_id",
+          "complaint_id",
+          "note_text",
+          "created_at",
+          "author"
+        ],
+        "properties": {
+          "note_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "complaint_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "note_text": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 500
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "author": {
+            "$ref": "#/components/schemas/AdminSummary"
+          }
+        }
+      },
+      "ProposeMeetingRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "meeting_date",
+          "meeting_time",
+          "location"
+        ],
+        "properties": {
+          "meeting_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Campus-local date. Cannot be before today; when the date is today, meeting_time must still be in the future."
+          },
+          "meeting_time": {
+            "type": "string",
+            "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+            "description": "Campus-local time in HH:MM format. Combined with meeting_date, it must be strictly later than current time."
+          },
+          "location": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 100
+          },
+          "message": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 300
+          }
+        }
+      },
+      "MeetingResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "meeting_id",
+          "complaint_id",
+          "meeting_date",
+          "meeting_time",
+          "location",
+          "message",
+          "student_response",
+          "proposed_at"
+        ],
+        "properties": {
+          "meeting_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "complaint_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "meeting_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "meeting_time": {
+            "type": "string",
+            "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+          },
+          "location": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 100
+          },
+          "message": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 300
+          },
+          "student_response": {
+            "type": "string",
+            "enum": [
+              "No Response"
+            ]
+          },
+          "proposed_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "MeetingActionResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "meeting_id",
+          "student_response",
+          "responded_at"
+        ],
+        "properties": {
+          "meeting_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "student_response": {
+            "type": "string",
+            "enum": [
+              "Confirmed"
+            ]
+          },
+          "responded_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "RequestMeetingRescheduleRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "preferred_date",
+          "preferred_time"
+        ],
+        "properties": {
+          "preferred_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Campus-local date. Combined with preferred_time, it must be strictly later than current time; today is allowed only if the time has not passed."
+          },
+          "preferred_time": {
+            "type": "string",
+            "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+            "description": "Campus-local time in HH:MM format. Combined with preferred_date, it must be strictly later than current time."
+          },
+          "message": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 300
+          }
+        }
+      },
+      "RescheduleRequestResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "request_id",
+          "meeting_id",
+          "student_response",
+          "preferred_date",
+          "preferred_time",
+          "message",
+          "requested_at"
+        ],
+        "properties": {
+          "request_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "meeting_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "student_response": {
+            "type": "string",
+            "enum": [
+              "Requested Different Time"
+            ]
+          },
+          "preferred_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "preferred_time": {
+            "type": "string",
+            "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+          },
+          "message": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 300
+          },
+          "requested_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AdminMeetingListItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "meeting_id",
+          "complaint_id",
+          "tracking_ref",
+          "category",
+          "meeting_date",
+          "meeting_time",
+          "location",
+          "student_response",
+          "proposed_at",
+          "reschedule_request"
+        ],
+        "properties": {
+          "meeting_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "complaint_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "tracking_ref": {
+            "type": "string",
+            "pattern": "^SVP-[A-Z0-9]{6}$"
+          },
+          "category": {
+            "$ref": "#/components/schemas/ComplaintCategorySummary"
+          },
+          "meeting_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "meeting_time": {
+            "type": "string",
+            "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+          },
+          "location": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 100
+          },
+          "message": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 300
+          },
+          "student_response": {
+            "$ref": "#/components/schemas/MeetingStudentResponse"
+          },
+          "responded_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "proposed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "reschedule_request": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": false,
+            "required": [
+              "preferred_date",
+              "preferred_time",
+              "message",
+              "requested_at"
+            ],
+            "properties": {
+              "preferred_date": {
+                "type": "string",
+                "format": "date"
+              },
+              "preferred_time": {
+                "type": "string",
+                "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+              },
+              "message": {
+                "type": "string",
+                "nullable": true,
+                "maxLength": 300
+              },
+              "requested_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "AdminMeetingListResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminMeetingListItem"
+            }
+          }
+        }
+      },
+      "StatusSummaryMetric": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status",
+          "total",
+          "percent"
+        ],
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/ComplaintStatus"
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "percent": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          }
+        }
+      },
+      "ResolutionRateMetric": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "total_complaints",
+          "resolved",
+          "resolution_rate_percent"
+        ],
+        "properties": {
+          "total_complaints": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "resolved": {
+            "type": "integer",
+            "minimum": 0,
+            "nullable": true,
+            "description": "May be null when the database contains no complaints."
+          },
+          "resolution_rate_percent": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "nullable": true,
+            "description": "Null when there are no complaints."
+          }
+        }
+      },
+      "CategorySummaryMetric": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "category_id",
+          "category",
+          "total",
+          "open_count",
+          "resolved",
+          "resolution_rate_percent"
+        ],
+        "properties": {
+          "category_id": {
+            "type": "integer"
+          },
+          "category": {
+            "type": "string"
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "open_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "resolved": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "resolution_rate_percent": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "nullable": true
+          }
+        }
+      },
+      "MonthlyVolumeMetric": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "month",
+          "total",
+          "anonymous",
+          "identified"
+        ],
+        "properties": {
+          "month": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])$"
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "anonymous": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "identified": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "ClassTimingMetric": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "class_timing",
+          "identified_complaints"
+        ],
+        "properties": {
+          "class_timing": {
+            "$ref": "#/components/schemas/ClassTiming"
+          },
+          "identified_complaints": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "StaffWorkloadMetric": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "staff_id",
+          "full_name",
+          "assigned_complaints"
+        ],
+        "properties": {
+          "staff_id": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true,
+            "description": "Null represents Unassigned."
+          },
+          "full_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "assigned_complaints": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "AnalyticsResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "total_complaints",
+          "status_summary",
+          "resolution_rate",
+          "category_summary",
+          "monthly_volume",
+          "class_timing_summary",
+          "staff_workload"
+        ],
+        "properties": {
+          "total_complaints": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "status_summary": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StatusSummaryMetric"
+            }
+          },
+          "resolution_rate": {
+            "$ref": "#/components/schemas/ResolutionRateMetric"
+          },
+          "category_summary": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CategorySummaryMetric"
+            }
+          },
+          "monthly_volume": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MonthlyVolumeMetric"
+            }
+          },
+          "class_timing_summary": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClassTimingMetric"
+            }
+          },
+          "staff_workload": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StaffWorkloadMetric"
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "Missing, invalid or expired credentials (or invalid tracking reference for a meeting response).",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            },
+            "example": {
+              "error": {
+                "code": "UNAUTHORIZED",
+                "message": "Authentication required",
+                "fields": {}
+              }
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Authenticated administrator is inactive or not permitted to perform the operation.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            },
+            "example": {
+              "error": {
+                "code": "FORBIDDEN",
+                "message": "Access is not permitted",
+                "fields": {}
+              }
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "The requested resource or tracking reference does not exist.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            },
+            "example": {
+              "error": {
+                "code": "NOT_FOUND",
+                "message": "Resource not found",
+                "fields": {}
+              }
+            }
+          }
+        }
+      },
+      "MethodNotAllowed": {
+        "description": "The HTTP method is not supported for this path.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            },
+            "example": {
+              "error": {
+                "code": "METHOD_NOT_ALLOWED",
+                "message": "Method not allowed",
+                "fields": {}
+              }
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "Operation conflicts with the resource's current state (for example, a meeting has already been answered).",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            },
+            "example": {
+              "error": {
+                "code": "CONFLICT",
+                "message": "The operation conflicts with the current resource state",
+                "fields": {}
+              }
+            }
+          }
+        }
+      },
+      "ValidationError": {
+        "description": "Request validation or a business-rule validation failed.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            },
+            "examples": {
+              "fieldValidation": {
+                "summary": "Field validation failure",
+                "value": {
+                  "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "Validation failed",
+                    "fields": {
+                      "description": [
+                        "Description must contain at least 20 characters."
+                      ]
+                    }
+                  }
+                }
+              },
+              "malformedJson": {
+                "summary": "Malformed JSON body",
+                "value": {
+                  "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "Validation failed",
+                    "fields": {
+                      "request": "Request body is not valid JSON"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "InternalServerError": {
+        "description": "Unexpected server error. Internal exception details are logged server-side and are not returned to the client.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            },
+            "example": {
+              "error": {
+                "code": "INTERNAL_ERROR",
+                "message": "Something went wrong on the server",
+                "fields": {}
+              }
+            }
+          }
+        }
+      },
+      "DefaultError": {
+        "description": "Any other HTTP error. The same standard error envelope is returned.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "TooManyRequests": {
+        "description": "The caller exceeded the configured rate limit. Retry after the indicated interval when supplied.",
+        "headers": {
+          "Retry-After": {
+            "description": "Number of seconds the client should wait before retrying, when known.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            },
+            "example": {
+              "error": {
+                "code": "RATE_LIMITED",
+                "message": "Too many requests",
+                "fields": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
