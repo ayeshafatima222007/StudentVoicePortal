@@ -1,0 +1,6 @@
+-r requirements.txt
+
+pytest==9.2.0
+httpx2==2.16.0
+PyYAML==6.0.3
+openapi-spec-validator==0.9.0
