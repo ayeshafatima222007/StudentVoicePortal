@@ -1,6 +1,6 @@
 -- =====================================================================
 -- Student Voice Portal - integrity tests (v2)
--- Run after schema.sql and sample_data.sql. Works on MySQL 8 and MariaDB (XAMPP).
+-- Run after schema.sql, migration_v3_student_accounts.sql and sample_data.sql. Works on MySQL 8 and MariaDB (XAMPP).
 -- Each test runs inside a transaction that is rolled back, so the sample
 -- data is unchanged afterwards. Output: one row per test with PASS/FAIL.
 --   expect = 'FAIL' -> the database must REJECT the statement
@@ -208,6 +208,38 @@ CALL svp_check('C06', 'sp_request_reschedule sets the response and stores the re
 CALL svp_check('C07', 'sp_confirm_meeting removes the request and confirms',
   "CALL sp_confirm_meeting(1)",
   "SET @svp_ok = (SELECT (SELECT student_response FROM meeting WHERE meeting_id = 1) = 'Confirmed' AND (SELECT COUNT(*) FROM reschedule_request WHERE meeting_id = 1) = 0)");
+
+-- ---------------- v3: student accounts, OTP and the 2-open-complaints rule ----------------
+-- Needs database/migration_v3_student_accounts.sql. The hash below only has the
+-- bcrypt FORMAT ($2b$12$ + 53 characters); it is not a real password.
+CALL svp_test('V01', 'Student email must be stored in lower case', 'FAIL',
+  "UPDATE student SET email = 'Student1@Uni.edu', password_hash = '$2b$12$abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0' WHERE student_id = 1", NULL);
+CALL svp_test('V02', 'Password must be a bcrypt hash, never plain text', 'FAIL',
+  "UPDATE student SET email = 'student1@uni.edu', password_hash = 'plainpassword' WHERE student_id = 1", NULL);
+CALL svp_test('V03', 'An account with an email must also have a password', 'FAIL',
+  "UPDATE student SET email = 'student1@uni.edu' WHERE student_id = 1", NULL);
+CALL svp_test('V04', 'Two students cannot share one email', 'FAIL',
+  "UPDATE student SET email = 'same@uni.edu', password_hash = '$2b$12$abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0' WHERE student_id = 1",
+  "UPDATE student SET email = 'same@uni.edu', password_hash = '$2b$12$abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0' WHERE student_id = 2");
+CALL svp_test('V05', 'Valid student account (lower-case email + bcrypt hash) is accepted', 'OK',
+  "UPDATE student SET email = 'student1@uni.edu', password_hash = '$2b$12$abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0' WHERE student_id = 1", NULL);
+CALL svp_test('V06', 'OTP allows at most 3 attempts', 'FAIL',
+  "INSERT INTO complaint_otp (student_id, code_hash, attempts, expires_at) VALUES (1, SHA2('123456secret',256), 4, NOW() + INTERVAL 5 MINUTE)", NULL);
+CALL svp_test('V07', 'OTP is stored as a SHA-256 hash, never the plain code', 'FAIL',
+  "INSERT INTO complaint_otp (student_id, code_hash, expires_at) VALUES (1, '123456', NOW() + INTERVAL 5 MINUTE)", NULL);
+CALL svp_test('V08', 'Valid OTP row is accepted', 'OK',
+  "INSERT INTO complaint_otp (student_id, code_hash, expires_at) VALUES (1, SHA2('123456secret',256), NOW() + INTERVAL 5 MINUTE)", NULL);
+CALL svp_test('V09', 'A student cannot have a 3rd open complaint', 'FAIL',
+  "INSERT INTO complaint (mode, category_id, student_id, description) VALUES ('Identified',3,1,'Second open complaint for the limit test.')",
+  "INSERT INTO complaint (mode, category_id, student_id, description) VALUES ('Identified',3,1,'Third open complaint must be blocked here.')");
+CALL svp_test('V10', 'After a complaint is resolved the student can submit again', 'OK',
+  "UPDATE complaint SET status = 'Resolved' WHERE complaint_id = 17",
+  "INSERT INTO complaint (mode, category_id, student_id, description) VALUES ('Identified',3,2,'New complaint after the old one was resolved.'),('Identified',3,2,'Another open complaint, still within the limit.')");
+CALL svp_test('V11', 'Anonymous complaints have no per-student limit', 'OK',
+  "INSERT INTO complaint (mode, category_id, option_id) VALUES ('Anonymous',3,6),('Anonymous',3,6),('Anonymous',3,6)", NULL);
+CALL svp_check('V12', 'v_student_open_complaints counts open complaints per student',
+  "SET @svp_dummy = 1",
+  "SET @svp_ok = (SELECT open_complaints = 1 FROM v_student_open_complaints WHERE student_id = 1)");
 
 DROP PROCEDURE svp_test;
 DROP PROCEDURE svp_check;
