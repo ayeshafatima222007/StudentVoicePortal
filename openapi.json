@@ -3,7 +3,7 @@
   "info": {
     "title": "Student Voice Portal API",
     "version": "1.0.0",
-    "description": "Contract-first API specification for the Student Voice Portal.\n\nAll paths in this document are relative to `/api/v1`. FastAPI is the officially\nselected backend framework for this project.\n\n**Security model**\n- Administrators authenticate with `POST /auth/login`. The returned JWT is\n  valid for 8 hours (28,800 seconds). Every `/admin/*` operation requires that\n  JWT. Missing or expired tokens return 401; inactive administrators return 403.\n- The login endpoint is limited to 5 attempts per 15-minute window under US-31.\n  A rate-limited request returns 429.\n- Students do not have accounts. They use a tracking reference to view a\n  complaint. Meeting confirmation and rescheduling require the reference in\n  `X-Tracking-Reference`, and the server must verify that it belongs to the\n  complaint associated with the meeting.\n- Tracking and meeting-response operations must also be rate-limited before\n  public deployment. Their exact thresholds are deployment/security settings\n  and must be selected and tested by the team; 429 is part of their contract.\n- Anonymous complaints must not store student identity or free-text\n  descriptions. Student tracking responses never include student identity.\n\n**Tracking-reference security**\nThe current user-story format is `SVP-` plus six uppercase alphanumeric\ncharacters. This is approximately 31 bits of entropy and is a constrained\ncapability secret, not a password. Preserve the format for compatibility with\nUS-12, but generate it with a cryptographically secure random-number generator\n(CSPRNG), retry on uniqueness collisions, rate-limit lookup/response endpoints,\nand redact references from application and access logs. Before real public\nexposure, the project owner should consider approving a longer reference and\nupdate the database column, validation, UI, and API contract together.\n\n**Shared error contract**\nEvery API error uses `{ \"error\": { \"code\": \"...\", \"message\": \"...\",\n\"fields\": {} } }`. Validation field values may be a string or a list of\nstrings. `fields` is an empty object when an error has no field-specific\ndetails. FastAPI request/business validation failures use 422. Rate limiting\nuses 429 with a `Retry-After` response header when the retry interval is known.\n\n**Date and time conventions**\nAPI audit timestamps (`date-time`) are returned in ISO 8601 UTC form with a `Z`\nsuffix. Persist and interpret audit timestamps in UTC, including setting the\nMySQL session/application convention explicitly; MySQL `DATETIME` itself does\nnot store a timezone. Meeting and preferred times are campus-local calendar\ndates and `HH:MM` times interpreted in one explicitly configured application\ntimezone. Do not rely on the server machine's implicit timezone. A combined\nmeeting date/time must be strictly later than the current time: today is\nallowed only when the selected time has not passed. Apply this rule to both\nmeeting proposals and student reschedule requests.\n\n**Route and contract decisions**\n- US-12 and US-13 define submission behaviour but not route strings. This\n  contract uses `POST /complaints/anonymous` and `POST /complaints/identified`.\n- US-21's `PATCH /staff` wording does not identify the complaint being changed.\n  This contract uses `PATCH /admin/complaints/{complaintId}/assignment`; the body\n  accepts an active `staff_id` or `null` to unassign. `GET /admin/staff` lists\n  active staff.\n- US-22's `POST /notes` wording does not identify the parent complaint. This\n  contract uses `POST /admin/complaints/{complaintId}/notes` so the note is\n  unambiguously attached to the complaint.\n- Status and meeting-proposal actions are similarly nested under\n  `/admin/complaints/{complaintId}`. The admin meeting list is `GET /admin/meetings`.\n- Student meeting actions are separate `POST /meetings/{meetingId}/confirm`\n  and `POST /meetings/{meetingId}/reschedule` operations because they have\n  different request and state-transition behaviour. Both require the tracking\n  reference capability header, not an admin JWT.\n- The admin complaint queue's reference search is case-insensitive. Normalize\n  the supplied reference to uppercase before querying the case-sensitive\n  `ascii_bin` tracking-reference column; use parameterized SQL.\n\nThis contract contains exactly 17 operations traced to US-04, US-07, US-09,\nUS-12, US-13, US-15, US-17, US-19, US-20, US-21, US-22, US-24, US-25, US-26,\nand US-27. UI-only stories do not add API operations.\n\n**Implementation dependencies that must not be overlooked**\n- The `/health` operation is process liveness and must not depend on a live\n  database query. The FastAPI app must not fail during import because a MySQL\n  pool cannot connect; use safe/lazy initialization or otherwise allow the\n  process to start and report liveness independently.\n- Enforce the US-20 status-transition matrix in the service/database layer\n  inside the same transaction that records status history. Documentation alone\n  does not enforce the rule.\n- Ensure meeting date/time comparisons use the configured campus timezone and\n  that audit timestamps use UTC consistently.\n"
+    "description": "Contract-first API specification for the Student Voice Portal.\n\nAll paths in this document are relative to `/api/v1`. FastAPI is the officially\nselected backend framework for this project.\n\n**Security model**\n- Administrators authenticate with `POST /auth/login`. The returned JWT is\n  valid for 8 hours (28,800 seconds). Every `/admin/*` operation requires that\n  JWT. Missing or expired tokens return 401; inactive administrators return 403.\n- The administrator login endpoint is limited to 5 attempts per 15-minute\n  window under US-31. A rate-limited request returns 429.\n- Students authenticate through POST /auth/student/login. Student JWTs carry\n  role: student, expire after 8 hours, and are separate from administrator\n  JWTs. Student identity comes from the verified token, never request fields.\n  Meeting confirmation and rescheduling continue to require the tracking\n  reference in X-Tracking-Reference, verified against the meeting's complaint.\n- After five failed student login attempts, further attempts are blocked for\n  15 minutes and return 429. A complaint OTP expires after 5 minutes and can\n  be requested again only after the 60-second cooldown.\n- A student may have at most two open complaints (Received or Under Review).\n  Identified submission requires a valid six-digit OTP sent to the student's\n  university email. The profile reports the current open-complaint count.\n- Tracking and meeting-response operations must also be rate-limited before\n  public deployment. Their exact thresholds are deployment/security settings\n  and must be selected and tested by the team; 429 is part of their contract.\n- Anonymous complaint submission is currently paused and returns 503 with\n  ANONYMOUS_PAUSED. Keep its operation and request schema in the contract.\n  When enabled, anonymous complaints must not store student identity or\n  free-text descriptions. Student tracking responses never include identity.\n\n**Tracking-reference security**\nThe current user-story format is `SVP-` plus six uppercase alphanumeric\ncharacters. This is approximately 31 bits of entropy and is a constrained\ncapability secret, not a password. Preserve the format for compatibility with\nUS-12, but generate it with a cryptographically secure random-number generator\n(CSPRNG), retry on uniqueness collisions, rate-limit lookup/response endpoints,\nand redact references from application and access logs. Before real public\nexposure, the project owner should consider approving a longer reference and\nupdate the database column, validation, UI, and API contract together.\n\n**Shared error contract**\nEvery API error uses `{ \"error\": { \"code\": \"...\", \"message\": \"...\",\n\"fields\": {} } }`. Validation field values may be a string or a list of\nstrings. `fields` is an empty object when an error has no field-specific\ndetails. FastAPI request/business validation failures use 422. Rate limiting\nuses 429 with a `Retry-After` response header when the retry interval is known.\n\n**Date and time conventions**\nAPI audit timestamps (`date-time`) are returned in ISO 8601 UTC form with a `Z`\nsuffix. Persist and interpret audit timestamps in UTC, including setting the\nMySQL session/application convention explicitly; MySQL `DATETIME` itself does\nnot store a timezone. Meeting and preferred times are campus-local calendar\ndates and `HH:MM` times interpreted in one explicitly configured application\ntimezone. Do not rely on the server machine's implicit timezone. A combined\nmeeting date/time must be strictly later than the current time: today is\nallowed only when the selected time has not passed. Apply this rule to both\nmeeting proposals and student reschedule requests.\n\n**Route and contract decisions**\n- US-12 and US-13 define original submission behaviour but not route strings.\n  This contract uses POST /complaints/anonymous and POST /complaints/identified.\n  The identified v2 flow is traced to US-44 and replaces US-13. US-42 pauses\n  the original anonymous submission flow without removing its operation.\n- US-21's `PATCH /staff` wording does not identify the complaint being changed.\n  This contract uses `PATCH /admin/complaints/{complaintId}/assignment`; the body\n  accepts an active `staff_id` or `null` to unassign. `GET /admin/staff` lists\n  active staff.\n- US-22's `POST /notes` wording does not identify the parent complaint. This\n  contract uses `POST /admin/complaints/{complaintId}/notes` so the note is\n  unambiguously attached to the complaint.\n- Status and meeting-proposal actions are similarly nested under\n  `/admin/complaints/{complaintId}`. The admin meeting list is `GET /admin/meetings`.\n- Student meeting actions are separate `POST /meetings/{meetingId}/confirm`\n  and `POST /meetings/{meetingId}/reschedule` operations because they have\n  different request and state-transition behaviour. Both require the tracking\n  reference capability header, not an admin JWT.\n- The admin complaint queue's reference search is case-insensitive. Normalize\n  the supplied reference to uppercase before querying the case-sensitive\n  `ascii_bin` tracking-reference column; use parameterized SQL.\n\nThis contract contains exactly 21 operations: the existing 17 plus student\nlogin, password change, profile, and complaint OTP. They are traced to US-04,\nUS-07, US-09, US-12, US-15, US-17, US-19, US-20, US-21, US-22, US-24, US-25,\nUS-26, US-27, US-39, US-40, US-41, US-42, and US-44. UI-only stories do not\nadd API operations.\n\n**Implementation dependencies that must not be overlooked**\n- The `/health` operation is process liveness and must not depend on a live\n  database query. The FastAPI app must not fail during import because a MySQL\n  pool cannot connect; use safe/lazy initialization or otherwise allow the\n  process to start and report liveness independently.\n- Enforce the US-20 status-transition matrix in the service/database layer\n  inside the same transaction that records status history. Documentation alone\n  does not enforce the rule.\n- Ensure meeting date/time comparisons use the configured campus timezone and\n  that audit timestamps use UTC consistently.\n"
   },
   "servers": [
     {
@@ -19,6 +19,14 @@
     {
       "name": "Authentication",
       "description": "Administrator authentication."
+    },
+    {
+      "name": "Student authentication",
+      "description": "Student login and password changes."
+    },
+    {
+      "name": "Student profile",
+      "description": "The authenticated student's profile."
     },
     {
       "name": "Lookups",
@@ -146,6 +154,296 @@
         }
       }
     },
+    "/auth/student/login": {
+      "post": {
+        "tags": [
+          "Student authentication"
+        ],
+        "operationId": "loginStudent",
+        "summary": "Log in a student",
+        "description": "Authenticates a student using their university email and password.\nOn success, returns a student JWT valid for 8 hours and indicates\nwhether the student must change their temporary password.\nWrong email or password returns the same 401 response to prevent\naccount enumeration. Inactive student accounts receive 403.\nAfter five failed login attempts, the account is locked for 15 minutes.\nFurther login attempts during the lock period return 429.",
+        "x-user-story": "US-39",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudentLoginRequest"
+              },
+              "example": {
+                "email": "student@uet.edu.pk",
+                "password": "example-password"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Student authenticated; student JWT issued.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudentLoginResponse"
+                },
+                "example": {
+                  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.example.signature",
+                  "token_type": "bearer",
+                  "expires_in": 28800,
+                  "must_change_password": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Wrong university email or password. The message is identical for both cases.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "error": {
+                    "code": "UNAUTHORIZED",
+                    "message": "Email or password is incorrect",
+                    "fields": {}
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Student account is inactive.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "error": {
+                    "code": "FORBIDDEN",
+                    "message": "Student account is inactive",
+                    "fields": {}
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "default": {
+            "$ref": "#/components/responses/DefaultError"
+          }
+        }
+      }
+    },
+    "/auth/student/change-password": {
+      "post": {
+        "tags": [
+          "Student authentication"
+        ],
+        "operationId": "changeStudentPassword",
+        "summary": "Change a student's password",
+        "description": "Allows an authenticated student to change their password using\ntheir current password and a new password. The new password must\ncontain between 8 and 64 characters. After a successful change,\nmust_change_password is set to false.",
+        "x-user-story": "US-40",
+        "security": [
+          {
+            "studentBearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudentChangePasswordRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Student password changed successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudentChangePasswordResponse"
+                },
+                "example": {
+                  "must_change_password": false
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "Student account is inactive.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "error": {
+                    "code": "FORBIDDEN",
+                    "message": "Student account is inactive",
+                    "fields": {}
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "default": {
+            "$ref": "#/components/responses/DefaultError"
+          }
+        }
+      }
+    },
+    "/student/me": {
+      "get": {
+        "tags": [
+          "Student profile"
+        ],
+        "operationId": "getStudentProfile",
+        "summary": "Get the authenticated student's profile",
+        "description": "Returns the profile of the currently authenticated student.\nThe student's identity is determined from the verified student JWT,\nnot from request parameters. The response includes university email,\nregistration number, academic batch, section, class timing, and the\ncurrent number of open complaints. Open complaints have status\nReceived or Under Review.",
+        "x-user-story": "US-40",
+        "security": [
+          {
+            "studentBearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Student profile retrieved successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudentProfileResponse"
+                },
+                "example": {
+                  "email": "student@uet.edu.pk",
+                  "registration_no": "2023-CS-045",
+                  "batch": {
+                    "batch_id": 3,
+                    "batch_year": 2023
+                  },
+                  "section": {
+                    "section_id": 2,
+                    "section_code": "A"
+                  },
+                  "class_timing": "Evening",
+                  "open_complaints": 1
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "default": {
+            "$ref": "#/components/responses/DefaultError"
+          }
+        }
+      }
+    },
+    "/student/complaints/otp": {
+      "post": {
+        "tags": [
+          "Student complaints"
+        ],
+        "operationId": "requestStudentComplaintOtp",
+        "summary": "Request an OTP for identified complaint submission",
+        "description": "Sends a six-digit, single-use OTP to the authenticated student's\nuniversity email address. The student identity and email address\nare obtained from the verified student JWT and account record.\nThe OTP expires after 5 minutes. A new OTP cannot be requested\nwithin 60 seconds of the previous request. Students who already\nhave two open complaints cannot request an OTP.",
+        "x-user-story": "US-41",
+        "security": [
+          {
+            "studentBearerAuth": []
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "OTP generated and sent to the student's university email.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudentComplaintOtpResponse"
+                },
+                "example": {
+                  "expires_in": 300,
+                  "resend_after": 60
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "description": "Student already has the maximum of two open complaints.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "error": {
+                    "code": "OPEN_COMPLAINT_LIMIT",
+                    "message": "You already have the maximum of two open complaints.",
+                    "fields": {}
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "default": {
+            "$ref": "#/components/responses/DefaultError"
+          }
+        }
+      }
+    },
     "/lookups": {
       "get": {
         "tags": [
@@ -185,9 +483,10 @@
           "Student complaints"
         ],
         "operationId": "submitAnonymousComplaint",
-        "summary": "Submit an anonymous complaint",
-        "description": "Creates an anonymous complaint using a predefined option. The selected\noption must belong to the selected category. Do not accept a student ID,\nregistration number, batch, section, class timing, or free-text description\non this operation. The server/database generates a unique `SVP-XXXXXX`\ntracking reference and saves the initial `Received` history entry in the\nsame submission transaction.\n",
-        "x-user-story": "US-12",
+        "summary": "Submit an anonymous complaint (currently paused)",
+        "description": "Anonymous complaint submission is currently paused. Requests return 503\nwith error code ANONYMOUS_PAUSED while the pause is in effect. Keep this\noperation and its request schema for the future anonymous flow.\n\nCreates an anonymous complaint using a predefined option. The selected\noption must belong to the selected category. Do not accept a student ID,\nregistration number, batch, section, class timing, or free-text description\non this operation. When enabled, the application generates a unique `SVP-XXXXXX`\ntracking reference using a cryptographically secure random number generator\n(CSPRNG). If a duplicate reference is generated, the application retries\nwith a newly generated reference. A database uniqueness constraint provides\nan additional safeguard. The initial `Received` history entry is saved in\nthe same submission transaction.\n",
+        "x-user-story": "US-42",
+        "x-original-user-story": "US-12",
         "security": [],
         "requestBody": {
           "required": true,
@@ -205,7 +504,7 @@
         },
         "responses": {
           "201": {
-            "description": "Anonymous complaint created.",
+            "description": "Anonymous complaint created when anonymous submission is enabled.",
             "content": {
               "application/json": {
                 "schema": {
@@ -216,6 +515,23 @@
                   "mode": "Anonymous",
                   "status": "Received",
                   "submitted_at": "2026-10-31T14:20:00Z"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Anonymous complaint submission is paused.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "error": {
+                    "code": "ANONYMOUS_PAUSED",
+                    "message": "Anonymous complaint submission is temporarily unavailable",
+                    "fields": {}
+                  }
                 }
               }
             }
@@ -242,9 +558,14 @@
         ],
         "operationId": "submitIdentifiedComplaint",
         "summary": "Submit an identified complaint",
-        "description": "Creates or updates the student record identified by registration number,\nthen creates an identified complaint. Registration number, batch, section,\nclass timing and a 20-1000 character description are required. Identified\nsubmissions do not use a predefined anonymous option. The server generates\nthe tracking reference and returns it to the student.\n",
-        "x-user-story": "US-13",
-        "security": [],
+        "description": "Creates an identified complaint for the student authenticated by the\nverified student JWT. Student identity, registration number, batch, section,\nand class timing are read from the authenticated student account and are not\naccepted in the request body. A valid, unexpired six-digit OTP is required.\nThe description must contain 20-1000 characters. Identified submissions do\nnot use a predefined anonymous option. The application generates the\ntracking reference using a CSPRNG, retries uniqueness collisions, and relies\non the database uniqueness constraint as an additional safeguard.\nStudents with two open complaints (Received or Under Review) receive 409\nwith error code OPEN_COMPLAINT_LIMIT.\n",
+        "x-user-story": "US-44",
+        "x-original-user-story": "US-13",
+        "security": [
+          {
+            "studentBearerAuth": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -253,12 +574,9 @@
                 "$ref": "#/components/schemas/IdentifiedComplaintRequest"
               },
               "example": {
-                "registration_no": "2023-CS-045",
-                "batch_id": 2,
-                "section_id": 1,
-                "class_timing": "Morning",
                 "category_id": 3,
-                "description": "The projector in Room 9 has not worked for a week and it affects lectures."
+                "description": "The projector in Room 9 has not worked for a week and it affects lectures.",
+                "otp": "041256"
               }
             }
           }
@@ -280,8 +598,47 @@
               }
             }
           },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "description": "Student already has the maximum of two open complaints.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "error": {
+                    "code": "OPEN_COMPLAINT_LIMIT",
+                    "message": "You already have the maximum of two open complaints.",
+                    "fields": {}
+                  }
+                }
+              }
+            }
+          },
           "422": {
-            "$ref": "#/components/responses/ValidationError"
+            "description": "The OTP is incorrect or expired, or the request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "example": {
+                  "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "Validation failed",
+                    "fields": {
+                      "otp": "The OTP is incorrect or expired."
+                    }
+                  }
+                }
+              }
+            }
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -775,7 +1132,7 @@
         ],
         "operationId": "proposeMeeting",
         "summary": "Propose a meeting for an identified complaint",
-        "description": "Creates a meeting proposal for an identified complaint only. Anonymous\ncomplaints are rejected with 422. The meeting date cannot be in the past, and\nthe combined local date/time must be strictly later than the current time. A\nsame-day meeting is allowed only when its time has not passed. The location\nmust be 3-100 characters and the optional message is limited to 300 characters.\nA new proposal starts with `No Response`. Requires an active administrator JWT.",
+        "description": "Creates a meeting proposal for an identified complaint only. Anonymous\ncomplaints are rejected with 422. The meeting date cannot be in the past, and\nthe combined local date/time must be strictly later than the current time. A\nsame-day meeting is allowed only when its time has not passed. The location\nmust be 3-100 characters and the optional message is limited to 300 characters.\nA new proposal starts with `No Response`. Return 409 if the latest meeting\nproposal is still unanswered (`No Response`), or if the complaint is already\n`Resolved` or `Rejected`. If the student has requested a reschedule, the\nadministrator may propose a replacement meeting. Requires an active\nadministrator JWT.",
         "x-user-story": "US-24",
         "security": [
           {
@@ -823,6 +1180,9 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
           "422": {
             "$ref": "#/components/responses/ValidationError"
           },
@@ -845,7 +1205,7 @@
         ],
         "operationId": "confirmMeeting",
         "summary": "Confirm a proposed meeting",
-        "description": "Allows the student associated with the meeting's complaint to confirm it.\nThe student has no account; the server must validate the supplied tracking\nreference against the meeting's complaint. If a reschedule request exists,\nit is removed before the meeting is marked Confirmed. Repeating confirmation\nfor an already-confirmed meeting returns 409.\n",
+        "description": "Allows the student associated with the meeting's complaint to confirm it.\nEven though students now have accounts, this operation retains its original\ntracking-reference authentication. The server must validate the supplied\nreference against the meeting's complaint. A missing X-Tracking-Reference\nheader returns 401. If the meeting ID does not exist, or the supplied\ntracking reference does not match the complaint associated with the meeting,\nreturn the same 404 response to prevent meeting-ID enumeration.\nDo not reveal which condition caused the 404. If a reschedule request exists,\nit is removed before the meeting is marked Confirmed. Repeating confirmation\nfor an already-confirmed meeting returns 409.\n",
         "x-user-story": "US-25",
         "security": [
           {
@@ -902,7 +1262,7 @@
         ],
         "operationId": "requestMeetingReschedule",
         "summary": "Request a different meeting time",
-        "description": "Allows the student associated with the meeting's complaint to request a\ndifferent date and time. The tracking reference must match the complaint\nassociated with the meeting. The combined preferred local date/time must be\nstrictly later than the current time; today is allowed only when the selected\ntime has not passed. The optional message is limited to 300 characters. A\nmeeting can have at most one outstanding reschedule request. Requests after\nthe meeting has already been answered return 409.",
+        "description": "Allows the student associated with the meeting's complaint to request a\ndifferent date and time. The tracking reference must match the complaint\nassociated with the meeting. If the X-Tracking-Reference header is missing,\nreturn 401. If the meeting ID does not exist, or the supplied tracking\nreference does not match the complaint associated with the meeting, return\nthe same 404 response to prevent meeting-ID enumeration. Do not reveal which\ncondition caused the 404. The combined preferred local date/time must be\nstrictly later than the current time; today is allowed only when the selected\ntime has not passed. The optional message is limited to 300 characters. A\nmeeting can have at most one outstanding reschedule request. Requests after\nthe meeting has already been answered return 409.",
         "x-user-story": "US-25",
         "security": [
           {
@@ -1074,13 +1434,19 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "JWT",
-        "description": "Administrator JWT. Issued by POST /auth/login and valid for 8 hours."
+        "description": "Administrator JWT issued by POST /auth/login, valid for 8 hours, with role claim set to admin."
+      },
+      "studentBearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Student JWT issued by POST /auth/student/login, valid for 8 hours, with\nrole claim set to student. It is not an administrator credential."
       },
       "trackingReference": {
         "type": "apiKey",
         "in": "header",
         "name": "X-Tracking-Reference",
-        "description": "Student tracking reference carried in `X-Tracking-Reference` for meeting\nresponses. The server must verify that it belongs to the complaint associated\nwith the meeting. This is a capability secret: rate-limit its use and never log\nits raw value. Students do not have accounts in this project."
+        "description": "Student tracking reference carried in `X-Tracking-Reference` for meeting\nresponses. The server must verify that it belongs to the complaint associated\nwith the meeting. This is a capability secret: rate-limit its use and never log\nits raw value. It remains separate from both administrator and student JWTs."
       }
     },
     "parameters": {
@@ -1234,6 +1600,161 @@
               28800
             ],
             "description": "Token lifetime in seconds (8 hours)."
+          }
+        }
+      },
+      "StudentLoginRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "email",
+          "password"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 150
+          },
+          "password": {
+            "type": "string",
+            "minLength": 1,
+            "writeOnly": true
+          }
+        }
+      },
+      "StudentLoginResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "access_token",
+          "token_type",
+          "expires_in",
+          "must_change_password"
+        ],
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "description": "Signed student JWT. Treat as a secret."
+          },
+          "token_type": {
+            "type": "string",
+            "enum": [
+              "bearer"
+            ]
+          },
+          "expires_in": {
+            "type": "integer",
+            "enum": [
+              28800
+            ],
+            "description": "Token lifetime in seconds (8 hours)."
+          },
+          "must_change_password": {
+            "type": "boolean",
+            "description": "True when the student must change their temporary password."
+          }
+        }
+      },
+      "StudentChangePasswordRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "current_password",
+          "new_password"
+        ],
+        "properties": {
+          "current_password": {
+            "type": "string",
+            "minLength": 1,
+            "writeOnly": true
+          },
+          "new_password": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 64,
+            "writeOnly": true,
+            "description": "New password must contain between 8 and 64 characters."
+          }
+        }
+      },
+      "StudentChangePasswordResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "must_change_password"
+        ],
+        "properties": {
+          "must_change_password": {
+            "type": "boolean",
+            "enum": [
+              false
+            ],
+            "description": "Password change completed; the forced-change requirement is cleared."
+          }
+        }
+      },
+      "StudentProfileResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "email",
+          "registration_no",
+          "batch",
+          "section",
+          "class_timing",
+          "open_complaints"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 150
+          },
+          "registration_no": {
+            "type": "string",
+            "minLength": 11,
+            "maxLength": 13,
+            "pattern": "^[0-9]{4}-[A-Z]{2,4}-[0-9]{3}$"
+          },
+          "batch": {
+            "$ref": "#/components/schemas/LookupBatch"
+          },
+          "section": {
+            "$ref": "#/components/schemas/LookupSection"
+          },
+          "class_timing": {
+            "$ref": "#/components/schemas/ClassTiming"
+          },
+          "open_complaints": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2,
+            "description": "Current number of open complaints (Received or Under Review)."
+          }
+        }
+      },
+      "StudentComplaintOtpResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expires_in",
+          "resend_after"
+        ],
+        "properties": {
+          "expires_in": {
+            "type": "integer",
+            "enum": [
+              300
+            ],
+            "description": "OTP validity period in seconds (5 minutes)."
+          },
+          "resend_after": {
+            "type": "integer",
+            "enum": [
+              60
+            ],
+            "description": "Minimum seconds before another OTP can be requested."
           }
         }
       },
@@ -1429,34 +1950,11 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "registration_no",
-          "batch_id",
-          "section_id",
-          "class_timing",
           "category_id",
-          "description"
+          "description",
+          "otp"
         ],
         "properties": {
-          "registration_no": {
-            "type": "string",
-            "minLength": 11,
-            "maxLength": 13,
-            "pattern": "^[0-9]{4}-[A-Z]{2,4}-[0-9]{3}$",
-            "example": "2023-CS-045"
-          },
-          "batch_id": {
-            "type": "integer",
-            "minimum": 1,
-            "description": "Must identify an active academic batch returned by GET /lookups."
-          },
-          "section_id": {
-            "type": "integer",
-            "minimum": 1,
-            "description": "Must identify an active section returned by GET /lookups."
-          },
-          "class_timing": {
-            "$ref": "#/components/schemas/ClassTiming"
-          },
           "category_id": {
             "type": "integer",
             "minimum": 1
@@ -1466,6 +1964,13 @@
             "minLength": 20,
             "maxLength": 1000,
             "description": "Trimmed free-text complaint description; whitespace-only values are invalid."
+          },
+          "otp": {
+            "type": "string",
+            "pattern": "^[0-9]{6}$",
+            "minLength": 6,
+            "maxLength": 6,
+            "description": "Six-digit OTP sent to the authenticated student's university email; a string preserves leading zeros."
           }
         }
       },
@@ -2870,7 +3375,7 @@
     },
     "responses": {
       "Unauthorized": {
-        "description": "Missing, invalid or expired credentials (or invalid tracking reference for a meeting response).",
+        "description": "401 is used for incorrect login credentials and for missing, invalid, or expired administrator/student JWTs on protected operations. For meeting confirmation and rescheduling, only a missing X-Tracking-Reference header returns 401. A supplied but nonmatching reference returns the same 404 as a nonexistent meeting.",
         "content": {
           "application/json": {
             "schema": {
@@ -2887,7 +3392,7 @@
         }
       },
       "Forbidden": {
-        "description": "Authenticated administrator is inactive or not permitted to perform the operation.",
+        "description": "The authenticated account is inactive or not permitted to perform the operation.",
         "content": {
           "application/json": {
             "schema": {
@@ -2904,7 +3409,7 @@
         }
       },
       "NotFound": {
-        "description": "The requested resource or tracking reference does not exist.",
+        "description": "The requested resource or tracking reference does not exist. For meeting confirmation and rescheduling, this same response is returned when the meeting ID does not exist or the supplied tracking reference does not match the complaint associated with that meeting. This prevents meeting-ID enumeration.",
         "content": {
           "application/json": {
             "schema": {

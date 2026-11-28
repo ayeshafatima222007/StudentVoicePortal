@@ -12,17 +12,26 @@ info:
     - Administrators authenticate with `POST /auth/login`. The returned JWT is
       valid for 8 hours (28,800 seconds). Every `/admin/*` operation requires that
       JWT. Missing or expired tokens return 401; inactive administrators return 403.
-    - The login endpoint is limited to 5 attempts per 15-minute window under US-31.
-      A rate-limited request returns 429.
-    - Students do not have accounts. They use a tracking reference to view a
-      complaint. Meeting confirmation and rescheduling require the reference in
-      `X-Tracking-Reference`, and the server must verify that it belongs to the
-      complaint associated with the meeting.
+    - The administrator login endpoint is limited to 5 attempts per 15-minute
+      window under US-31. A rate-limited request returns 429.
+    - Students authenticate through POST /auth/student/login. Student JWTs carry
+      role: student, expire after 8 hours, and are separate from administrator
+      JWTs. Student identity comes from the verified token, never request fields.
+      Meeting confirmation and rescheduling continue to require the tracking
+      reference in X-Tracking-Reference, verified against the meeting's complaint.
+    - After five failed student login attempts, further attempts are blocked for
+      15 minutes and return 429. A complaint OTP expires after 5 minutes and can
+      be requested again only after the 60-second cooldown.
+    - A student may have at most two open complaints (Received or Under Review).
+      Identified submission requires a valid six-digit OTP sent to the student's
+      university email. The profile reports the current open-complaint count.
     - Tracking and meeting-response operations must also be rate-limited before
       public deployment. Their exact thresholds are deployment/security settings
       and must be selected and tested by the team; 429 is part of their contract.
-    - Anonymous complaints must not store student identity or free-text
-      descriptions. Student tracking responses never include student identity.
+    - Anonymous complaint submission is currently paused and returns 503 with
+      ANONYMOUS_PAUSED. Keep its operation and request schema in the contract.
+      When enabled, anonymous complaints must not store student identity or
+      free-text descriptions. Student tracking responses never include identity.
 
     **Tracking-reference security**
     The current user-story format is `SVP-` plus six uppercase alphanumeric
@@ -53,8 +62,10 @@ info:
     meeting proposals and student reschedule requests.
 
     **Route and contract decisions**
-    - US-12 and US-13 define submission behaviour but not route strings. This
-      contract uses `POST /complaints/anonymous` and `POST /complaints/identified`.
+    - US-12 and US-13 define original submission behaviour but not route strings.
+      This contract uses POST /complaints/anonymous and POST /complaints/identified.
+      The identified v2 flow is traced to US-44 and replaces US-13. US-42 pauses
+      the original anonymous submission flow without removing its operation.
     - US-21's `PATCH /staff` wording does not identify the complaint being changed.
       This contract uses `PATCH /admin/complaints/{complaintId}/assignment`; the body
       accepts an active `staff_id` or `null` to unassign. `GET /admin/staff` lists
@@ -72,9 +83,11 @@ info:
       the supplied reference to uppercase before querying the case-sensitive
       `ascii_bin` tracking-reference column; use parameterized SQL.
 
-    This contract contains exactly 17 operations traced to US-04, US-07, US-09,
-    US-12, US-13, US-15, US-17, US-19, US-20, US-21, US-22, US-24, US-25, US-26,
-    and US-27. UI-only stories do not add API operations.
+    This contract contains exactly 21 operations: the existing 17 plus student
+    login, password change, profile, and complaint OTP. They are traced to US-04,
+    US-07, US-09, US-12, US-15, US-17, US-19, US-20, US-21, US-22, US-24, US-25,
+    US-26, US-27, US-39, US-40, US-41, US-42, and US-44. UI-only stories do not
+    add API operations.
 
     **Implementation dependencies that must not be overlooked**
     - The `/health` operation is process liveness and must not depend on a live
@@ -94,6 +107,10 @@ tags:
     description: Application health.
   - name: Authentication
     description: Administrator authentication.
+  - name: Student authentication
+    description: Student login and password changes.
+  - name: Student profile
+    description: The authenticated student's profile.
   - name: Lookups
     description: Active values used to populate student forms.
   - name: Student complaints
@@ -182,6 +199,214 @@ paths:
 
         '429':
           $ref: '#/components/responses/TooManyRequests'
+  /auth/student/login:
+    post:
+      tags: [Student authentication]
+      operationId: loginStudent
+      summary: Log in a student
+      description: |-
+        Authenticates a student using their university email and password.
+        On success, returns a student JWT valid for 8 hours and indicates
+        whether the student must change their temporary password.
+        Wrong email or password returns the same 401 response to prevent
+        account enumeration. Inactive student accounts receive 403.
+        After five failed login attempts, the account is locked for 15 minutes.
+        Further login attempts during the lock period return 429.
+      x-user-story: US-39
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StudentLoginRequest'
+            example:
+              email: student@uet.edu.pk
+              password: example-password
+      responses:
+        '200':
+          description: Student authenticated; student JWT issued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentLoginResponse'
+              example:
+                access_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.example.signature
+                token_type: bearer
+                expires_in: 28800
+                must_change_password: true
+        '401':
+          description: Wrong university email or password. The message is identical for both cases.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                error:
+                  code: UNAUTHORIZED
+                  message: Email or password is incorrect
+                  fields: {}
+        '403':
+          description: Student account is inactive.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Student account is inactive
+                  fields: {}
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        default:
+          $ref: '#/components/responses/DefaultError'
+  /auth/student/change-password:
+    post:
+      tags: [Student authentication]
+      operationId: changeStudentPassword
+      summary: Change a student's password
+      description: |-
+        Allows an authenticated student to change their password using
+        their current password and a new password. The new password must
+        contain between 8 and 64 characters. After a successful change,
+        must_change_password is set to false.
+      x-user-story: US-40
+      security:
+        - studentBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StudentChangePasswordRequest'
+      responses:
+        '200':
+          description: Student password changed successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentChangePasswordResponse'
+              example:
+                must_change_password: false
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Student account is inactive.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: Student account is inactive
+                  fields: {}
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        default:
+          $ref: '#/components/responses/DefaultError'
+  /student/me:
+    get:
+      tags: [Student profile]
+      operationId: getStudentProfile
+      summary: Get the authenticated student's profile
+      description: |-
+        Returns the profile of the currently authenticated student.
+        The student's identity is determined from the verified student JWT,
+        not from request parameters. The response includes university email,
+        registration number, academic batch, section, class timing, and the
+        current number of open complaints. Open complaints have status
+        Received or Under Review.
+      x-user-story: US-40
+      security:
+        - studentBearerAuth: []
+      responses:
+        '200':
+          description: Student profile retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentProfileResponse'
+              example:
+                email: student@uet.edu.pk
+                registration_no: 2023-CS-045
+                batch:
+                  batch_id: 3
+                  batch_year: 2023
+                section:
+                  section_id: 2
+                  section_code: A
+                class_timing: Evening
+                open_complaints: 1
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        default:
+          $ref: '#/components/responses/DefaultError'
+  /student/complaints/otp:
+    post:
+      tags: [Student complaints]
+      operationId: requestStudentComplaintOtp
+      summary: Request an OTP for identified complaint submission
+      description: |-
+        Sends a six-digit, single-use OTP to the authenticated student's
+        university email address. The student identity and email address
+        are obtained from the verified student JWT and account record.
+        The OTP expires after 5 minutes. A new OTP cannot be requested
+        within 60 seconds of the previous request. Students who already
+        have two open complaints cannot request an OTP.
+      x-user-story: US-41
+      security:
+        - studentBearerAuth: []
+      responses:
+        '202':
+          description: OTP generated and sent to the student's university email.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentComplaintOtpResponse'
+              example:
+                expires_in: 300
+                resend_after: 60
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Student already has the maximum of two open complaints.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                error:
+                  code: OPEN_COMPLAINT_LIMIT
+                  message: You already have the maximum of two open complaints.
+                  fields: {}
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        default:
+          $ref: '#/components/responses/DefaultError'
   /lookups:
     get:
       tags: [Lookups]
@@ -212,15 +437,23 @@ paths:
     post:
       tags: [Student complaints]
       operationId: submitAnonymousComplaint
-      summary: Submit an anonymous complaint
+      summary: Submit an anonymous complaint (currently paused)
       description: |
+        Anonymous complaint submission is currently paused. Requests return 503
+        with error code ANONYMOUS_PAUSED while the pause is in effect. Keep this
+        operation and its request schema for the future anonymous flow.
+
         Creates an anonymous complaint using a predefined option. The selected
         option must belong to the selected category. Do not accept a student ID,
         registration number, batch, section, class timing, or free-text description
-        on this operation. The server/database generates a unique `SVP-XXXXXX`
-        tracking reference and saves the initial `Received` history entry in the
-        same submission transaction.
-      x-user-story: US-12
+        on this operation. When enabled, the application generates a unique `SVP-XXXXXX`
+        tracking reference using a cryptographically secure random number generator
+        (CSPRNG). If a duplicate reference is generated, the application retries
+        with a newly generated reference. A database uniqueness constraint provides
+        an additional safeguard. The initial `Received` history entry is saved in
+        the same submission transaction.
+      x-user-story: US-42
+      x-original-user-story: US-12
       security: []
       requestBody:
         required: true
@@ -233,7 +466,7 @@ paths:
               option_id: 6
       responses:
         '201':
-          description: Anonymous complaint created.
+          description: Anonymous complaint created when anonymous submission is enabled.
           content:
             application/json:
               schema:
@@ -243,6 +476,17 @@ paths:
                 mode: Anonymous
                 status: Received
                 submitted_at: '2026-10-31T14:20:00Z'
+        '503':
+          description: Anonymous complaint submission is paused.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                error:
+                  code: ANONYMOUS_PAUSED
+                  message: Anonymous complaint submission is temporarily unavailable
+                  fields: {}
         '422':
           $ref: '#/components/responses/ValidationError'
         '500':
@@ -258,13 +502,20 @@ paths:
       operationId: submitIdentifiedComplaint
       summary: Submit an identified complaint
       description: |
-        Creates or updates the student record identified by registration number,
-        then creates an identified complaint. Registration number, batch, section,
-        class timing and a 20-1000 character description are required. Identified
-        submissions do not use a predefined anonymous option. The server generates
-        the tracking reference and returns it to the student.
-      x-user-story: US-13
-      security: []
+        Creates an identified complaint for the student authenticated by the
+        verified student JWT. Student identity, registration number, batch, section,
+        and class timing are read from the authenticated student account and are not
+        accepted in the request body. A valid, unexpired six-digit OTP is required.
+        The description must contain 20-1000 characters. Identified submissions do
+        not use a predefined anonymous option. The application generates the
+        tracking reference using a CSPRNG, retries uniqueness collisions, and relies
+        on the database uniqueness constraint as an additional safeguard.
+        Students with two open complaints (Received or Under Review) receive 409
+        with error code OPEN_COMPLAINT_LIMIT.
+      x-user-story: US-44
+      x-original-user-story: US-13
+      security:
+        - studentBearerAuth: []
       requestBody:
         required: true
         content:
@@ -272,12 +523,9 @@ paths:
             schema:
               $ref: '#/components/schemas/IdentifiedComplaintRequest'
             example:
-              registration_no: 2023-CS-045
-              batch_id: 2
-              section_id: 1
-              class_timing: Morning
               category_id: 3
               description: The projector in Room 9 has not worked for a week and it affects lectures.
+              otp: '041256'
       responses:
         '201':
           description: Identified complaint created.
@@ -290,8 +538,33 @@ paths:
                 mode: Identified
                 status: Received
                 submitted_at: '2026-10-31T14:20:00Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Student already has the maximum of two open complaints.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                error:
+                  code: OPEN_COMPLAINT_LIMIT
+                  message: You already have the maximum of two open complaints.
+                  fields: {}
         '422':
-          $ref: '#/components/responses/ValidationError'
+          description: The OTP is incorrect or expired, or the request is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                error:
+                  code: VALIDATION_ERROR
+                  message: Validation failed
+                  fields:
+                    otp: The OTP is incorrect or expired.
         '500':
           $ref: '#/components/responses/InternalServerError'
         '405':
@@ -635,7 +908,11 @@ paths:
         the combined local date/time must be strictly later than the current time. A
         same-day meeting is allowed only when its time has not passed. The location
         must be 3-100 characters and the optional message is limited to 300 characters.
-        A new proposal starts with `No Response`. Requires an active administrator JWT.
+        A new proposal starts with `No Response`. Return 409 if the latest meeting
+        proposal is still unanswered (`No Response`), or if the complaint is already
+        `Resolved` or `Rejected`. If the student has requested a reschedule, the
+        administrator may propose a replacement meeting. Requires an active
+        administrator JWT.
       x-user-story: US-24
       security:
         - bearerAuth: []
@@ -665,6 +942,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/ValidationError'
         '500':
@@ -681,8 +960,13 @@ paths:
       summary: Confirm a proposed meeting
       description: |
         Allows the student associated with the meeting's complaint to confirm it.
-        The student has no account; the server must validate the supplied tracking
-        reference against the meeting's complaint. If a reschedule request exists,
+        Even though students now have accounts, this operation retains its original
+        tracking-reference authentication. The server must validate the supplied
+        reference against the meeting's complaint. A missing X-Tracking-Reference
+        header returns 401. If the meeting ID does not exist, or the supplied
+        tracking reference does not match the complaint associated with the meeting,
+        return the same 404 response to prevent meeting-ID enumeration.
+        Do not reveal which condition caused the 404. If a reschedule request exists,
         it is removed before the meeting is marked Confirmed. Repeating confirmation
         for an already-confirmed meeting returns 409.
       x-user-story: US-25
@@ -722,7 +1006,11 @@ paths:
       description: |-
         Allows the student associated with the meeting's complaint to request a
         different date and time. The tracking reference must match the complaint
-        associated with the meeting. The combined preferred local date/time must be
+        associated with the meeting. If the X-Tracking-Reference header is missing,
+        return 401. If the meeting ID does not exist, or the supplied tracking
+        reference does not match the complaint associated with the meeting, return
+        the same 404 response to prevent meeting-ID enumeration. Do not reveal which
+        condition caused the 404. The combined preferred local date/time must be
         strictly later than the current time; today is allowed only when the selected
         time has not passed. The optional message is limited to 300 characters. A
         meeting can have at most one outstanding reschedule request. Requests after
@@ -843,7 +1131,14 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: Administrator JWT. Issued by POST /auth/login and valid for 8 hours.
+      description: Administrator JWT issued by POST /auth/login, valid for 8 hours, with role claim set to admin.
+    studentBearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |-
+        Student JWT issued by POST /auth/student/login, valid for 8 hours, with
+        role claim set to student. It is not an administrator credential.
     trackingReference:
       type: apiKey
       in: header
@@ -852,7 +1147,7 @@ components:
         Student tracking reference carried in `X-Tracking-Reference` for meeting
         responses. The server must verify that it belongs to the complaint associated
         with the meeting. This is a capability secret: rate-limit its use and never log
-        its raw value. Students do not have accounts in this project.
+        its raw value. It remains separate from both administrator and student JWTs.
   parameters:
     TrackingReferencePath:
       name: ref
@@ -958,6 +1253,102 @@ components:
           type: integer
           enum: [28800]
           description: Token lifetime in seconds (8 hours).
+
+    StudentLoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 150
+        password:
+          type: string
+          minLength: 1
+          writeOnly: true
+
+    StudentLoginResponse:
+      type: object
+      additionalProperties: false
+      required: [access_token, token_type, expires_in, must_change_password]
+      properties:
+        access_token:
+          type: string
+          description: Signed student JWT. Treat as a secret.
+        token_type:
+          type: string
+          enum: [bearer]
+        expires_in:
+          type: integer
+          enum: [28800]
+          description: Token lifetime in seconds (8 hours).
+        must_change_password:
+          type: boolean
+          description: True when the student must change their temporary password.
+    StudentChangePasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [current_password, new_password]
+      properties:
+        current_password:
+          type: string
+          minLength: 1
+          writeOnly: true
+        new_password:
+          type: string
+          minLength: 8
+          maxLength: 64
+          writeOnly: true
+          description: New password must contain between 8 and 64 characters.
+
+    StudentChangePasswordResponse:
+      type: object
+      additionalProperties: false
+      required: [must_change_password]
+      properties:
+        must_change_password:
+          type: boolean
+          enum: [false]
+          description: Password change completed; the forced-change requirement is cleared.
+    StudentProfileResponse:
+      type: object
+      additionalProperties: false
+      required: [email, registration_no, batch, section, class_timing, open_complaints]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 150
+        registration_no:
+          type: string
+          minLength: 11
+          maxLength: 13
+          pattern: '^[0-9]{4}-[A-Z]{2,4}-[0-9]{3}$'
+        batch:
+          $ref: '#/components/schemas/LookupBatch'
+        section:
+          $ref: '#/components/schemas/LookupSection'
+        class_timing:
+          $ref: '#/components/schemas/ClassTiming'
+        open_complaints:
+          type: integer
+          minimum: 0
+          maximum: 2
+          description: Current number of open complaints (Received or Under Review).
+    StudentComplaintOtpResponse:
+      type: object
+      additionalProperties: false
+      required: [expires_in, resend_after]
+      properties:
+        expires_in:
+          type: integer
+          enum: [300]
+          description: OTP validity period in seconds (5 minutes).
+        resend_after:
+          type: integer
+          enum: [60]
+          description: Minimum seconds before another OTP can be requested.
     AdminSummary:
       type: object
       additionalProperties: false
@@ -1069,24 +1460,8 @@ components:
     IdentifiedComplaintRequest:
       type: object
       additionalProperties: false
-      required: [registration_no, batch_id, section_id, class_timing, category_id, description]
+      required: [category_id, description, otp]
       properties:
-        registration_no:
-          type: string
-          minLength: 11
-          maxLength: 13
-          pattern: '^[0-9]{4}-[A-Z]{2,4}-[0-9]{3}$'
-          example: 2023-CS-045
-        batch_id:
-          type: integer
-          minimum: 1
-          description: Must identify an active academic batch returned by GET /lookups.
-        section_id:
-          type: integer
-          minimum: 1
-          description: Must identify an active section returned by GET /lookups.
-        class_timing:
-          $ref: '#/components/schemas/ClassTiming'
         category_id:
           type: integer
           minimum: 1
@@ -1095,6 +1470,12 @@ components:
           minLength: 20
           maxLength: 1000
           description: Trimmed free-text complaint description; whitespace-only values are invalid.
+        otp:
+          type: string
+          pattern: '^[0-9]{6}$'
+          minLength: 6
+          maxLength: 6
+          description: Six-digit OTP sent to the authenticated student's university email; a string preserves leading zeros.
     ComplaintSubmissionResponse:
       type: object
       additionalProperties: false
@@ -1948,8 +2329,12 @@ components:
             $ref: '#/components/schemas/StaffWorkloadMetric'
   responses:
     Unauthorized:
-      description: Missing, invalid or expired credentials (or invalid tracking reference for a meeting
-        response).
+      description: >-
+        401 is used for incorrect login credentials and for missing, invalid, or
+        expired administrator/student JWTs on protected operations. For meeting
+        confirmation and rescheduling, only a missing X-Tracking-Reference header
+        returns 401. A supplied but nonmatching reference returns the same 404 as a
+        nonexistent meeting.
       content:
         application/json:
           schema:
@@ -1960,7 +2345,7 @@ components:
               message: Authentication required
               fields: {}
     Forbidden:
-      description: Authenticated administrator is inactive or not permitted to perform the operation.
+      description: The authenticated account is inactive or not permitted to perform the operation.
       content:
         application/json:
           schema:
@@ -1971,7 +2356,11 @@ components:
               message: Access is not permitted
               fields: {}
     NotFound:
-      description: The requested resource or tracking reference does not exist.
+      description: >-
+        The requested resource or tracking reference does not exist. For meeting
+        confirmation and rescheduling, this same response is returned when the meeting
+        ID does not exist or the supplied tracking reference does not match the
+        complaint associated with that meeting. This prevents meeting-ID enumeration.
       content:
         application/json:
           schema:
