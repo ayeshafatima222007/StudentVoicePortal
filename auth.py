@@ -34,15 +34,15 @@ class AdminLoginRequest(BaseModel):
     email: str = Field(min_length=3, max_length=150)
     password: str = Field(min_length=1)
 
-@field_validator("email")
-@classmethod
-def valid_email(cls, value):
-    value = value.strip().lower()
+    @field_validator("email")
+    @classmethod
+    def valid_email(cls, value):
+      value = value.strip().lower()
 
-    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", value):
-        raise ValueError("Enter a valid email address")
+      if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", value):
+          raise ValueError("Enter a valid email address")
 
-    return value
+          return value
 
 def _check_rate_limit(request: Request):
     client_ip = request.client.host if request.client else "unknown"
@@ -101,6 +101,7 @@ def login_admin(payload: AdminLoginRequest, request: Request):
             {
                 "sub": str(admin["admin_id"]),
                 "email": admin["email"],
+                "role": "admin",  # ADDED:
                 "iat": now,
                 "exp": expires_at,
             },
