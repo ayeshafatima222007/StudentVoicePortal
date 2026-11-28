@@ -108,8 +108,13 @@ INSERT INTO complaint (complaint_id, tracking_ref, mode, category_id, option_id,
   (17, 'SVP-4A72KD', 'Identified', 2, NULL, 2, 'Lecture slides for this course are shared only after the class, so we cannot prepare or follow along during lectures.', 'Received', NULL, '2026-09-28 10:16:00'),
   (18, 'SVP-8F4K29', 'Identified', 3, NULL, 1, 'Several chairs in Room 7 are broken and the ceiling fan makes a loud noise during lectures, making it hard to concentrate.', 'Under Review', 1, '2026-09-29 10:17:00');
 
--- Later status changes only (the initial 'Received' rows already exist via the trigger).
-INSERT INTO status_history (complaint_id, old_status, new_status, changed_by_admin_id, changed_at) VALUES
+-- The trigger trg_complaint_ai wrote each complaint's first history row with its
+-- CURRENT status. Every complaint really started as 'Received', so fix those rows.
+SET SQL_SAFE_UPDATES = 0;
+UPDATE status_history SET new_status = 'Received' WHERE old_status IS NULL;
+
+-- Later status changes only (the initial 'Received' rows now exist).
+ INSERT INTO status_history (complaint_id, old_status, new_status, changed_by_admin_id, changed_at) VALUES
   (1, 'Received', 'Under Review', 1, DATE_ADD('2026-07-22 10:00:00', INTERVAL 1 DAY)),
   (1, 'Under Review', 'Resolved', 1, DATE_ADD('2026-07-22 10:00:00', INTERVAL 2 DAY)),
   (2, 'Received', 'Under Review', 1, DATE_ADD('2026-07-30 10:01:00', INTERVAL 1 DAY)),
