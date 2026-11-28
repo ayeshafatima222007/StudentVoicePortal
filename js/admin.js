@@ -1,6 +1,6 @@
 /* =========================================================
    Student Voice Portal — admin.js
-   Simulated admin login, dashboard, queue, details,
+   Real admin login, dashboard, queue, details,
    meetings and analytics. PROTOTYPE ONLY.
    ========================================================= */
 (function () {
@@ -28,7 +28,7 @@
   }
   const STATUS_FILL = { "Received": "f-received", "Under Review": "f-review", "Resolved": "f-resolved", "Rejected": "f-rejected" };
 
-  /* ---------------- Login ---------------- */
+  /* ---------------- API-backed admin login ---------------- */
   function initLogin() {
     if (S.isAdmin()) { window.location.replace("dashboard.html"); return; }
     const form = document.getElementById("loginForm");
@@ -46,30 +46,42 @@
       this.setAttribute("aria-label", show ? "Hide password" : "Show password");
       this.textContent = show ? "Hide" : "Show";
     });
-    document.getElementById("fillDemo").addEventListener("click", () => {
-      email.value = S.DEMO_ADMIN.email; pw.value = S.DEMO_ADMIN.password;
-      S.clearState(email); S.clearState(pw);
-    });
-
-    form.addEventListener("submit", e => {
+    form.addEventListener("submit", async e => {
       e.preventDefault();
       alertBox.innerHTML = "";
       let ok = true;
       const ev = email.value.trim();
-      if (!ev) { S.setError(email, "Username or email is required."); ok = false; }
-      else if (ev.includes("@") && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ev)) { S.setError(email, "Enter a valid email address."); ok = false; }
+      if (!ev) { S.setError(email, "Email is required."); ok = false; }
+      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ev)) { S.setError(email, "Enter a valid email address."); ok = false; }
       else S.setValid(email);
       if (!pw.value) { S.setError(pw, "Password is required."); ok = false; } else S.setValid(pw);
       if (!ok) { S.focusFirstError(form); return; }
 
-      if (ev.toLowerCase() === S.DEMO_ADMIN.email && pw.value === S.DEMO_ADMIN.password) {
-        S.loginAdmin(remember.checked, ev);
+      const submitButton = form.querySelector('button[type="submit"]');
+      submitButton.disabled = true;
+      submitButton.textContent = "Logging in...";
+      try {
+        const response = await fetch("../api/v1/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: ev, password: pw.value })
+        });
+        const result = await response.json();
+        if (!response.ok) {
+          const message = result?.error?.message || "Login failed. Please try again.";
+          S.showAlert(alertBox, "danger", S.esc(message));
+          pw.value = "";
+          pw.focus();
+          return;
+        }
+        S.loginAdmin(result.access_token, remember.checked, ev);
         S.queueToast("Logged in");
         window.location.href = "dashboard.html";
-      } else {
-        S.clearState(email); S.setError(pw, "");
-        S.showAlert(alertBox, "danger", "<strong>Invalid login.</strong> The email or password is incorrect.");
-        pw.value = ""; pw.focus();
+      } catch (error) {
+        S.showAlert(alertBox, "danger", "Unable to contact the server. Please try again.");
+      } finally {
+        submitButton.disabled = false;
+        submitButton.textContent = "Log in";
       }
     });
   }

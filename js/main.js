@@ -8,7 +8,7 @@
   "use strict";
 
   const STORE_KEY = "svp_submissions_v3";
-  const SESSION_KEY = "svp_admin_session";
+  const TOKEN_KEY = "svp_admin_token";
   const REMEMBER_KEY = "svp_admin_remember";
 
   /* ---------- Constants taken from the approved requirements ---------- */
@@ -299,7 +299,7 @@
     if (autoHide) setTimeout(() => { if (container) container.innerHTML = ""; }, 5000);
   }
 
-  /* ---------- Admin session (SIMULATED) ---------- */
+  /* ---------- Admin session (SIMULATED) ---------- 
   function isAdmin() { return storageGet(SESSION_KEY) === "1" || sessionMemory; }
   let sessionMemory = false;
   function loginAdmin(remember, email) {
@@ -308,7 +308,43 @@
     if (remember) storageSet(REMEMBER_KEY, email); else storageRemove(REMEMBER_KEY);
   }
   function logoutAdmin() { sessionMemory = false; storageRemove(SESSION_KEY); }
-  function rememberedEmail() { return storageGet(REMEMBER_KEY) || ""; }
+  function rememberedEmail() { return storageGet(REMEMBER_KEY) || ""; }*/
+
+
+/* ---------- Admin session (JWT authentication) ---------- */
+
+let sessionMemory = false;
+
+// Check whether an admin JWT exists
+function isAdmin() {
+    return !!storageGet(TOKEN_KEY) || sessionMemory;
+}
+
+// Save the JWT received from the backend
+function loginAdmin(token, remember, email) {
+    sessionMemory = true;
+
+    storageSet(TOKEN_KEY, token);
+
+    if (remember) {
+        storageSet(REMEMBER_KEY, email);
+    } else {
+        storageRemove(REMEMBER_KEY);
+    }
+}
+
+// Remove the admin JWT when logging out
+function logoutAdmin() {
+    sessionMemory = false;
+    storageRemove(TOKEN_KEY);
+}
+
+// Get remembered admin email
+function rememberedEmail() {
+    return storageGet(REMEMBER_KEY) || "";
+}
+
+
 
   /* ---------- Progress tracker (status page) ---------- */
   function timelineHTML(status) {
@@ -462,7 +498,7 @@
 
   window.SVP = {
     COMPLAINT_CATEGORIES, CLASS_TIMINGS, OPTION_INFO, STATUSES, STAFF, MEETING_RESPONSES,
-    SEED: clone(SEED), BATCHES, SECTIONS, REF_PATTERN, REG_PATTERN, LIMITS, DEMO_ADMIN,
+    SEED: clone(SEED), BATCHES, SECTIONS, REF_PATTERN, REG_PATTERN, LIMITS,
     loadAll, saveAll, getByRef, updateByRef, addSubmission, resetData, generateRef,
     todayISO, formatDate, formatTime, esc, param, statusBadge, responseBadge, typePill, typeLabel, showToast, queueToast,
     setError, setValid, clearState, focusFirstError, textLengthRule, selectRule, attachCounter, fillSelect,
