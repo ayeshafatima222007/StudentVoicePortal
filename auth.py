@@ -37,12 +37,12 @@ class AdminLoginRequest(BaseModel):
     @field_validator("email")
     @classmethod
     def valid_email(cls, value):
-      value = value.strip().lower()
+       value = value.strip().lower()
 
-      if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", value):
-          raise ValueError("Enter a valid email address")
+       if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", value):
+           raise ValueError("Enter a valid email address")
 
-          return value
+       return value
 
 def _check_rate_limit(request: Request):
     client_ip = request.client.host if request.client else "unknown"
@@ -53,7 +53,7 @@ def _check_rate_limit(request: Request):
             history.popleft()
         if len(history) >= LOGIN_MAX_ATTEMPTS:
             retry_after = max(1, int(LOGIN_WINDOW_SECONDS - (now - history[0])))
-            raise AppError(429, "TOO_MANY_REQUESTS", "Too many login attempts. Try again later.")
+            raise AppError(429, "RATE_LIMITED", "Too many login attempts. Try again later.")
         history.append(now)
 
 
